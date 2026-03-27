@@ -30,7 +30,6 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         SetupEnvironment();
 
         // Wire UI signals
-        _ui.BackPressed += OnBackPressed;
         _ui.ResetViewPressed += () => _camera?.ResetView();
         _assembler.RoomSelected += (roomId, roomName) => _ui.ShowRoomInfo(roomId, roomName);
 
@@ -42,39 +41,21 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         GodotNative.GD.Print("[HomeMapScene] Loaded with mock home data.");
     }
 
-    public override void _UnhandledInput(GodotNative.InputEvent @event)
-    {
-        // Back button / Escape to return to main menu
-        if (@event is GodotNative.InputEventKey key && key.Pressed && key.Keycode == GodotNative.Key.Escape)
-        {
-            GetTree().ChangeSceneToFile("res://Scenes/MainMenu.tscn");
-        }
-
-        // Tap empty space to deselect
-        if (@event is GodotNative.InputEventMouseButton mb
-            && mb.Pressed && mb.ButtonIndex == GodotNative.MouseButton.Left)
-        {
-            // Will be handled by camera raycast — if no room hit, deselect
-        }
-    }
-
-    private void OnBackPressed()
-    {
-        GetTree().ChangeSceneToFile("res://Scenes/MainMenu.tscn");
-    }
-
     private void SetupEnvironment()
     {
         var envNode = GetNode<GodotNative.WorldEnvironment>("WorldEnvironment");
 
-        var sky = new GodotNative.Sky();
         var env = new GodotNative.Environment();
+        // Light background like SmartThings app
         env.BackgroundMode = GodotNative.Environment.BGMode.Color;
-        env.BackgroundColor = new GodotNative.Color(0.95f, 0.95f, 0.97f, 1.0f);
+        env.BackgroundColor = new GodotNative.Color(0.96f, 0.96f, 0.98f, 1.0f);
+
+        // Bright ambient light so rooms look clean and colorful
         env.AmbientLightSource = GodotNative.Environment.AmbientSource.Color;
-        env.AmbientLightColor = new GodotNative.Color(0.9f, 0.9f, 0.95f, 1.0f);
-        env.AmbientLightEnergy = 0.7f;
-        env.TonemapMode = GodotNative.Environment.ToneMapper.Aces;
+        env.AmbientLightColor = new GodotNative.Color(1.0f, 1.0f, 1.0f, 1.0f);
+        env.AmbientLightEnergy = 0.8f;
+
+        env.TonemapMode = GodotNative.Environment.ToneMapper.Linear;
 
         envNode.Environment = env;
     }

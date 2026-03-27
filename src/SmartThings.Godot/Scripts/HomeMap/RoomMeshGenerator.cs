@@ -179,7 +179,7 @@ public static class RoomMeshGenerator
         var body = new GodotNative.StaticBody3D();
         var colShape = new GodotNative.CollisionShape3D();
         var box = new GodotNative.BoxShape3D();
-        box.Size = new GodotNative.Vector3(0.1f, segment.Height, wallLength);
+        box.Size = new GodotNative.Vector3(0.3f, segment.Height, wallLength);
         colShape.Shape = box;
         colShape.Position = new GodotNative.Vector3(0, segment.Height * 0.5f, 0);
         body.AddChild(colShape);
@@ -193,7 +193,7 @@ public static class RoomMeshGenerator
     private static GodotNative.ArrayMesh CreateSolidWall(float length, float height)
     {
         float halfLen = length * 0.5f;
-        const float thickness = 0.05f;
+        const float thickness = 0.15f;
 
         // Front and back faces of a thin wall
         var verts = new GodotNative.Vector3[]
@@ -213,7 +213,7 @@ public static class RoomMeshGenerator
     private static GodotNative.ArrayMesh CreateWallWithDoor(float length, float height, float doorWidth, float doorHeight)
     {
         float halfLen = length * 0.5f;
-        const float thickness = 0.05f;
+        const float thickness = 0.15f;
         float halfDoor = doorWidth * 0.5f;
 
         // Three sections: left of door, above door, right of door
@@ -313,9 +313,9 @@ public static class RoomMeshGenerator
         if (_wallShader != null) mat.Shader = _wallShader;
 
         var color = RoomColorPalette.GetWallColor(room.RoomType);
-        mat.SetShaderParameter("wall_color", new GodotNative.Color(color.R, color.G, color.B, color.A));
-        mat.SetShaderParameter("wall_opacity", 0.6f);
-        mat.SetShaderParameter("fade_height", 0.7f);
+        // Walls are always white with full opacity (SmartThings style)
+        mat.SetShaderParameter("wall_color", new GodotNative.Color(0.95f, 0.95f, 0.97f, 1.0f));
+        mat.SetShaderParameter("wall_opacity", 1.0f);
 
         return mat;
     }

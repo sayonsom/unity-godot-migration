@@ -4,10 +4,7 @@
 // =============================================================================
 
 shader_type spatial;
-render_mode blend_mix, depth_draw_opaque, cull_disabled, unshaded;
-
-// Billboard: always face camera
-render_mode vertex_lighting;
+render_mode blend_mix, depth_draw_opaque, cull_disabled, unshaded, vertex_lighting;
 
 // --- Pin parameters (set from C#) ---
 uniform vec4 status_color : source_color = vec4(0.3, 0.69, 0.31, 1.0);

@@ -29,9 +29,6 @@ public partial class HomeMapUI : GodotNative.Control
     private SmartHome? _home;
     private bool _is3DView = true;
 
-    /// <summary>Fired when back button is pressed.</summary>
-    [GodotNative.Signal] public delegate void BackPressedEventHandler();
-
     /// <summary>Fired when reset view button is pressed.</summary>
     [GodotNative.Signal] public delegate void ResetViewPressedEventHandler();
 
@@ -66,7 +63,7 @@ public partial class HomeMapUI : GodotNative.Control
             _roomDeviceCountLabel.Text = $"{deviceCount} device{(deviceCount != 1 ? "s" : "")}";
 
         _roomInfoPopup.Visible = true;
-        _devicePopup!.Visible = false;
+        if (_devicePopup != null) _devicePopup.Visible = false;
     }
 
     /// <summary>Show device detail popup.</summary>
@@ -76,7 +73,7 @@ public partial class HomeMapUI : GodotNative.Control
 
         _devicePopupLabel.Text = $"{device.Label}\n{device.Category} - {device.Status}";
         _devicePopup.Visible = true;
-        _roomInfoPopup!.Visible = false;
+        if (_roomInfoPopup != null) _roomInfoPopup.Visible = false;
     }
 
     /// <summary>Hide all popups.</summary>
@@ -90,71 +87,117 @@ public partial class HomeMapUI : GodotNative.Control
 
     private void BuildUI()
     {
-        // Make this Control fill the entire screen
+        // CRITICAL: Let touch events pass through to the 3D scene
+        // The root Control must ignore mouse/touch so the camera can receive input
+        MouseFilter = GodotNative.Control.MouseFilterEnum.Ignore;
         AnchorsPreset = (int)GodotNative.Control.LayoutPreset.FullRect;
 
         // === Top Status Bar ===
-        var topBar = new GodotNative.HBoxContainer();
+        var topBar = new GodotNative.PanelContainer();
         topBar.AnchorsPreset = (int)GodotNative.Control.LayoutPreset.TopWide;
-        topBar.OffsetBottom = 50;
+        topBar.OffsetBottom = 60;
+        // Top bar DOES capture input (for buttons)
+        topBar.MouseFilter = GodotNative.Control.MouseFilterEnum.Stop;
         AddChild(topBar);
 
-        _backBtn = new GodotNative.Button();
-        _backBtn.Text = "< Back";
-        _backBtn.Pressed += () => EmitSignal(SignalName.BackPressed);
-        topBar.AddChild(_backBtn);
+        // Dark semi-transparent background for top bar
+        var topBarStyle = new GodotNative.StyleBoxFlat();
+        topBarStyle.BgColor = new GodotNative.Color(0.15f, 0.15f, 0.2f, 0.85f);
+        topBarStyle.ContentMarginLeft = 10;
+        topBarStyle.ContentMarginRight = 10;
+        topBarStyle.ContentMarginTop = 5;
+        topBarStyle.ContentMarginBottom = 5;
+        topBar.AddThemeStyleboxOverride("panel", topBarStyle);
+
+        var topBarHbox = new GodotNative.HBoxContainer();
+        topBar.AddChild(topBarHbox);
+
+        var backLabel = new GodotNative.Label();
+        backLabel.Text = "<";
+        backLabel.AddThemeFontSizeOverride("font_size", 24);
+        topBarHbox.AddChild(backLabel);
 
         _homeNameLabel = new GodotNative.Label();
-        _homeNameLabel.Text = "My Home";
+        _homeNameLabel.Text = "My home";
         _homeNameLabel.HorizontalAlignment = GodotNative.HorizontalAlignment.Center;
         _homeNameLabel.SizeFlagsHorizontal = GodotNative.Control.SizeFlags.ExpandFill;
-        topBar.AddChild(_homeNameLabel);
+        _homeNameLabel.AddThemeFontSizeOverride("font_size", 22);
+        topBarHbox.AddChild(_homeNameLabel);
 
         var settingsBtn = new GodotNative.Button();
         settingsBtn.Text = "Settings";
-        topBar.AddChild(settingsBtn);
+        topBarHbox.AddChild(settingsBtn);
 
         // === Room Info Popup (centered) ===
         _roomInfoPopup = new GodotNative.PanelContainer();
         _roomInfoPopup.AnchorsPreset = (int)GodotNative.Control.LayoutPreset.Center;
-        _roomInfoPopup.OffsetLeft = -120;
-        _roomInfoPopup.OffsetTop = -50;
-        _roomInfoPopup.OffsetRight = 120;
-        _roomInfoPopup.OffsetBottom = 50;
+        _roomInfoPopup.OffsetLeft = -150;
+        _roomInfoPopup.OffsetTop = -60;
+        _roomInfoPopup.OffsetRight = 150;
+        _roomInfoPopup.OffsetBottom = 60;
         _roomInfoPopup.Visible = false;
+        _roomInfoPopup.MouseFilter = GodotNative.Control.MouseFilterEnum.Stop;
         AddChild(_roomInfoPopup);
+
+        var popupStyle = new GodotNative.StyleBoxFlat();
+        popupStyle.BgColor = new GodotNative.Color(0.1f, 0.1f, 0.15f, 0.9f);
+        popupStyle.CornerRadiusTopLeft = 12;
+        popupStyle.CornerRadiusTopRight = 12;
+        popupStyle.CornerRadiusBottomLeft = 12;
+        popupStyle.CornerRadiusBottomRight = 12;
+        popupStyle.ContentMarginLeft = 20;
+        popupStyle.ContentMarginRight = 20;
+        popupStyle.ContentMarginTop = 15;
+        popupStyle.ContentMarginBottom = 15;
+        _roomInfoPopup.AddThemeStyleboxOverride("panel", popupStyle);
 
         var roomInfoVbox = new GodotNative.VBoxContainer();
         _roomInfoPopup.AddChild(roomInfoVbox);
 
         _roomNameLabel = new GodotNative.Label();
         _roomNameLabel.HorizontalAlignment = GodotNative.HorizontalAlignment.Center;
+        _roomNameLabel.AddThemeFontSizeOverride("font_size", 20);
         roomInfoVbox.AddChild(_roomNameLabel);
 
         _roomDeviceCountLabel = new GodotNative.Label();
         _roomDeviceCountLabel.HorizontalAlignment = GodotNative.HorizontalAlignment.Center;
+        _roomDeviceCountLabel.AddThemeFontSizeOverride("font_size", 16);
         roomInfoVbox.AddChild(_roomDeviceCountLabel);
 
         // === Device Popup ===
         _devicePopup = new GodotNative.PanelContainer();
         _devicePopup.AnchorsPreset = (int)GodotNative.Control.LayoutPreset.Center;
-        _devicePopup.OffsetLeft = -120;
-        _devicePopup.OffsetTop = -40;
-        _devicePopup.OffsetRight = 120;
-        _devicePopup.OffsetBottom = 40;
+        _devicePopup.OffsetLeft = -150;
+        _devicePopup.OffsetTop = -50;
+        _devicePopup.OffsetRight = 150;
+        _devicePopup.OffsetBottom = 50;
         _devicePopup.Visible = false;
+        _devicePopup.MouseFilter = GodotNative.Control.MouseFilterEnum.Stop;
+        _devicePopup.AddThemeStyleboxOverride("panel", popupStyle);
         AddChild(_devicePopup);
 
         _devicePopupLabel = new GodotNative.Label();
         _devicePopupLabel.HorizontalAlignment = GodotNative.HorizontalAlignment.Center;
+        _devicePopupLabel.AddThemeFontSizeOverride("font_size", 18);
         _devicePopup.AddChild(_devicePopupLabel);
 
-        // === Bottom Controls ===
-        var bottomBar = new GodotNative.HBoxContainer();
+        // === Bottom Tab Bar ===
+        var bottomBar = new GodotNative.PanelContainer();
         bottomBar.AnchorsPreset = (int)GodotNative.Control.LayoutPreset.BottomWide;
-        bottomBar.OffsetTop = -50;
-        bottomBar.Alignment = GodotNative.BoxContainer.AlignmentMode.Center;
+        bottomBar.OffsetTop = -55;
+        bottomBar.MouseFilter = GodotNative.Control.MouseFilterEnum.Stop;
         AddChild(bottomBar);
+
+        var bottomStyle = new GodotNative.StyleBoxFlat();
+        bottomStyle.BgColor = new GodotNative.Color(0.15f, 0.15f, 0.2f, 0.85f);
+        bottomStyle.ContentMarginLeft = 5;
+        bottomStyle.ContentMarginRight = 5;
+        bottomStyle.ContentMarginTop = 5;
+        bottomStyle.ContentMarginBottom = 5;
+        bottomBar.AddThemeStyleboxOverride("panel", bottomStyle);
+
+        var bottomHbox = new GodotNative.HBoxContainer();
+        bottomBar.AddChild(bottomHbox);
 
         string[] tabs = { "Favorites", "Devices", "Routines", "Find", "Menu" };
         foreach (var tab in tabs)
@@ -162,16 +205,17 @@ public partial class HomeMapUI : GodotNative.Control
             var btn = new GodotNative.Button();
             btn.Text = tab;
             btn.SizeFlagsHorizontal = GodotNative.Control.SizeFlags.ExpandFill;
-            bottomBar.AddChild(btn);
+            bottomHbox.AddChild(btn);
         }
 
         // === Floating action buttons (top-right) ===
         var actionBox = new GodotNative.VBoxContainer();
         actionBox.AnchorsPreset = (int)GodotNative.Control.LayoutPreset.TopRight;
-        actionBox.OffsetLeft = -100;
-        actionBox.OffsetTop = 60;
+        actionBox.OffsetLeft = -130;
+        actionBox.OffsetTop = 70;
         actionBox.OffsetRight = -10;
-        actionBox.OffsetBottom = 160;
+        actionBox.OffsetBottom = 170;
+        actionBox.MouseFilter = GodotNative.Control.MouseFilterEnum.Ignore;
         AddChild(actionBox);
 
         _resetViewBtn = new GodotNative.Button();

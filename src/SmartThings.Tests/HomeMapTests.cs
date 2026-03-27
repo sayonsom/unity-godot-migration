@@ -147,14 +147,14 @@ public class RoomColorPaletteTests
     }
 
     [Fact]
-    public void GetColor_LivingRoomIsWarmBeige()
+    public void GetColor_LivingRoomIsBrightGreen()
     {
         var color = RoomColorPalette.GetColor(RoomType.LivingRoom);
 
-        // E8D5B7 ≈ (0.91, 0.84, 0.72)
-        Assert.InRange(color.R, 0.9f, 0.92f);
-        Assert.InRange(color.G, 0.83f, 0.85f);
-        Assert.InRange(color.B, 0.71f, 0.73f);
+        // 90EE90 ≈ (0.565, 0.933, 0.565) — bright green
+        Assert.InRange(color.R, 0.55f, 0.58f);
+        Assert.InRange(color.G, 0.92f, 0.94f);
+        Assert.InRange(color.B, 0.55f, 0.58f);
     }
 
     [Fact]

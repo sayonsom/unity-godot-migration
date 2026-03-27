@@ -1,7 +1,6 @@
 // =============================================================================
-// IsometricCameraController.cs — Isometric camera with pan/zoom/rotate
-// Touch: 1-finger pan, pinch zoom, 2-finger rotate
-// Mouse: scroll zoom, middle-click pan, right-click rotate
+// IsometricCameraController.cs — Stable isometric camera for 3D Home Map
+// Orthographic projection, constrained bounds, gentle touch controls
 // =============================================================================
 
 using GodotNative = Godot;
@@ -9,64 +8,63 @@ using GodotNative = Godot;
 namespace SmartThings.Godot.Scripts.HomeMap;
 
 /// <summary>
-/// Isometric camera controller for the 3D Home Map View.
-/// Provides smooth pan, zoom, and rotate with touch and mouse support.
+/// Orthographic isometric camera for the 3D Home Map View.
+/// Designed for stability — the map never flies off screen.
+/// Touch: 1-finger pan, pinch zoom. Mouse: scroll zoom, drag pan.
 /// </summary>
 public partial class IsometricCameraController : GodotNative.Camera3D
 {
-    // ── Exports ──────────────────────────────────────────────────────────────
+    // ── Configuration ────────────────────────────────────────────────────────
 
-    [GodotNative.Export] public float MinZoom { get; set; } = 5.0f;
-    [GodotNative.Export] public float MaxZoom { get; set; } = 30.0f;
-    [GodotNative.Export] public float ZoomSpeed { get; set; } = 2.0f;
-    [GodotNative.Export] public float PanSpeed { get; set; } = 0.02f;
-    [GodotNative.Export] public float RotateSpeed { get; set; } = 0.005f;
-    [GodotNative.Export] public float SmoothFactor { get; set; } = 8.0f;
-    [GodotNative.Export] public float DefaultAngle { get; set; } = 45.0f;
+    [GodotNative.Export] public float MinOrthoSize { get; set; } = 4.0f;
+    [GodotNative.Export] public float MaxOrthoSize { get; set; } = 18.0f;
+    [GodotNative.Export] public float PanSpeed { get; set; } = 0.015f;
+    [GodotNative.Export] public float SmoothFactor { get; set; } = 10.0f;
+    [GodotNative.Export] public float IsometricAngle { get; set; } = 55.0f; // Degrees from horizontal
 
     // ── State ────────────────────────────────────────────────────────────────
 
-    private GodotNative.Vector3 _targetLookAt = GodotNative.Vector3.Zero;
-    private float _targetDistance = 15.0f;
-    private float _targetYaw = GodotNative.Mathf.DegToRad(45.0f);
-    private float _targetPitch;
+    private GodotNative.Vector3 _targetLookAt;
+    private float _targetOrthoSize = 12.0f;
 
-    private float _currentDistance;
-    private float _currentYaw;
-    private float _currentPitch;
     private GodotNative.Vector3 _currentLookAt;
+    private float _currentOrthoSize;
+
+    // Bounds (set by assembler)
+    private GodotNative.Vector3 _boundsMin;
+    private GodotNative.Vector3 _boundsMax;
+    private bool _hasBounds;
 
     // Touch tracking
-    private readonly Dictionary<int, GodotNative.Vector2> _touchPositions = new();
-    private float _lastPinchDistance;
-    private float _lastTwoFingerAngle;
-    private bool _isPanning;
-    private GodotNative.Vector2 _lastPanPosition;
+    private readonly Dictionary<int, GodotNative.Vector2> _touches = new();
+    private float _lastPinchDist;
+    private bool _isDragging;
+    private GodotNative.Vector2 _dragStart;
 
-    // Double-tap detection
-    private float _lastTapTime;
-    private GodotNative.Vector2 _lastTapPosition;
-    private const float DoubleTapTime = 0.3f;
-    private const float DoubleTapDistance = 30.0f;
+    // Fixed camera direction (no rotation allowed — stable view)
+    private float _yawRad;
+    private float _pitchRad;
+    private const float CameraDistance = 30.0f; // Far enough for ortho
 
-    /// <summary>Fired when a room is tapped. Payload is room_id string.</summary>
-    [GodotNative.Signal] public delegate void RoomTappedEventHandler(string roomId);
-
-    /// <summary>Fired when a room is double-tapped for zoom-to-fit.</summary>
-    [GodotNative.Signal] public delegate void RoomDoubleTappedEventHandler(string roomId);
+    /// <summary>Fired when user taps (not drags) on screen.</summary>
+    [GodotNative.Signal] public delegate void ScreenTappedEventHandler(GodotNative.Vector2 screenPos);
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
 
     public override void _Ready()
     {
-        _targetPitch = GodotNative.Mathf.DegToRad(DefaultAngle);
-        _currentDistance = _targetDistance;
-        _currentYaw = _targetYaw;
-        _currentPitch = _targetPitch;
+        // Set up orthographic projection
+        Projection = ProjectionType.Orthogonal;
+        Size = _targetOrthoSize;
+
+        _yawRad = GodotNative.Mathf.DegToRad(-30.0f);  // Slight rotation for 3D feel
+        _pitchRad = GodotNative.Mathf.DegToRad(IsometricAngle);
+
+        _currentOrthoSize = _targetOrthoSize;
         _currentLookAt = _targetLookAt;
 
-        UpdateCameraPosition();
-        GodotNative.GD.Print("[IsometricCamera] Ready — isometric view active.");
+        UpdateCameraTransform();
+        GodotNative.GD.Print("[IsometricCamera] Ready — orthographic isometric view.");
     }
 
     public override void _Process(double delta)
@@ -74,13 +72,19 @@ public partial class IsometricCameraController : GodotNative.Camera3D
         float dt = (float)delta;
         float lerp = 1.0f - GodotNative.Mathf.Exp(-SmoothFactor * dt);
 
-        // Smooth interpolation toward targets
-        _currentDistance = GodotNative.Mathf.Lerp(_currentDistance, _targetDistance, lerp);
-        _currentYaw = GodotNative.Mathf.LerpAngle(_currentYaw, _targetYaw, lerp);
-        _currentPitch = GodotNative.Mathf.Lerp(_currentPitch, _targetPitch, lerp);
+        // Smooth interpolation
+        _currentOrthoSize = GodotNative.Mathf.Lerp(_currentOrthoSize, _targetOrthoSize, lerp);
         _currentLookAt = _currentLookAt.Lerp(_targetLookAt, lerp);
 
-        UpdateCameraPosition();
+        // Clamp look-at to bounds
+        if (_hasBounds)
+        {
+            _currentLookAt.X = GodotNative.Mathf.Clamp(_currentLookAt.X, _boundsMin.X, _boundsMax.X);
+            _currentLookAt.Z = GodotNative.Mathf.Clamp(_currentLookAt.Z, _boundsMin.Z, _boundsMax.Z);
+        }
+
+        Size = _currentOrthoSize;
+        UpdateCameraTransform();
     }
 
     public override void _UnhandledInput(GodotNative.InputEvent @event)
@@ -89,51 +93,69 @@ public partial class IsometricCameraController : GodotNative.Camera3D
         if (@event is GodotNative.InputEventMouseButton mouseBtn)
         {
             if (mouseBtn.ButtonIndex == GodotNative.MouseButton.WheelUp)
-                _targetDistance = GodotNative.Mathf.Max(MinZoom, _targetDistance - ZoomSpeed);
+            {
+                _targetOrthoSize = GodotNative.Mathf.Max(MinOrthoSize, _targetOrthoSize - 1.0f);
+                GetViewport().SetInputAsHandled();
+            }
             else if (mouseBtn.ButtonIndex == GodotNative.MouseButton.WheelDown)
-                _targetDistance = GodotNative.Mathf.Min(MaxZoom, _targetDistance + ZoomSpeed);
+            {
+                _targetOrthoSize = GodotNative.Mathf.Min(MaxOrthoSize, _targetOrthoSize + 1.0f);
+                GetViewport().SetInputAsHandled();
+            }
         }
 
-        // ── Mouse drag (middle=pan, right=rotate) ─────────────────────
+        // ── Mouse drag pan ─────────────────────────────────────────────
         if (@event is GodotNative.InputEventMouseMotion mouseMotion)
         {
-            if ((mouseMotion.ButtonMask & GodotNative.MouseButtonMask.Middle) != 0)
+            if ((mouseMotion.ButtonMask & GodotNative.MouseButtonMask.Left) != 0)
             {
-                Pan(mouseMotion.Relative);
-            }
-            else if ((mouseMotion.ButtonMask & GodotNative.MouseButtonMask.Right) != 0)
-            {
-                _targetYaw -= mouseMotion.Relative.X * RotateSpeed;
-                _targetPitch = GodotNative.Mathf.Clamp(
-                    _targetPitch - mouseMotion.Relative.Y * RotateSpeed,
-                    GodotNative.Mathf.DegToRad(15.0f),
-                    GodotNative.Mathf.DegToRad(85.0f));
+                ApplyPan(mouseMotion.Relative);
+                GetViewport().SetInputAsHandled();
             }
         }
 
-        // ── Touch input ────────────────────────────────────────────────
+        // ── Touch ──────────────────────────────────────────────────────
         if (@event is GodotNative.InputEventScreenTouch touch)
+        {
             HandleTouch(touch);
+        }
         if (@event is GodotNative.InputEventScreenDrag drag)
+        {
             HandleDrag(drag);
+        }
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
 
-    /// <summary>Reset camera to default isometric view.</summary>
-    public void ResetView()
+    /// <summary>Set the home bounds so the camera stays within the map area.</summary>
+    public void SetBounds(GodotNative.Vector3 min, GodotNative.Vector3 max)
     {
-        _targetDistance = 15.0f;
-        _targetYaw = GodotNative.Mathf.DegToRad(45.0f);
-        _targetPitch = GodotNative.Mathf.DegToRad(DefaultAngle);
-        _targetLookAt = GodotNative.Vector3.Zero;
+        // Add padding
+        float pad = 3.0f;
+        _boundsMin = new GodotNative.Vector3(min.X - pad, 0, min.Z - pad);
+        _boundsMax = new GodotNative.Vector3(max.X + pad, 0, max.Z + pad);
+        _hasBounds = true;
     }
 
-    /// <summary>Zoom to fit a specific world-space bounding box.</summary>
-    public void ZoomToFit(GodotNative.Vector3 center, float radius)
+    /// <summary>Center on a point and optionally set zoom to fit a radius.</summary>
+    public void FocusOn(GodotNative.Vector3 center, float radius = 0)
     {
-        _targetLookAt = center;
-        _targetDistance = GodotNative.Mathf.Clamp(radius * 2.5f, MinZoom, MaxZoom);
+        _targetLookAt = new GodotNative.Vector3(center.X, 0, center.Z);
+        if (radius > 0)
+        {
+            _targetOrthoSize = GodotNative.Mathf.Clamp(radius * 1.5f, MinOrthoSize, MaxOrthoSize);
+        }
+    }
+
+    /// <summary>Reset to show entire home.</summary>
+    public void ResetView()
+    {
+        if (_hasBounds)
+        {
+            _targetLookAt = (_boundsMin + _boundsMax) * 0.5f;
+            float span = GodotNative.Mathf.Max(_boundsMax.X - _boundsMin.X, _boundsMax.Z - _boundsMin.Z);
+            _targetOrthoSize = GodotNative.Mathf.Clamp(span * 0.6f, MinOrthoSize, MaxOrthoSize);
+        }
     }
 
     // ── Touch handling ───────────────────────────────────────────────────────
@@ -142,120 +164,102 @@ public partial class IsometricCameraController : GodotNative.Camera3D
     {
         if (touch.Pressed)
         {
-            _touchPositions[touch.Index] = touch.Position;
+            _touches[touch.Index] = touch.Position;
 
-            if (_touchPositions.Count == 1)
+            if (_touches.Count == 1)
             {
-                _isPanning = true;
-                _lastPanPosition = touch.Position;
-
-                // Double-tap detection
-                float now = (float)GodotNative.Time.GetTicksMsec() / 1000.0f;
-                if (now - _lastTapTime < DoubleTapTime
-                    && touch.Position.DistanceTo(_lastTapPosition) < DoubleTapDistance)
-                {
-                    TryRaycastRoom(touch.Position, isDoubleTap: true);
-                }
-                _lastTapTime = now;
-                _lastTapPosition = touch.Position;
+                _isDragging = false;
+                _dragStart = touch.Position;
             }
-            else if (_touchPositions.Count == 2)
+            else if (_touches.Count == 2)
             {
-                _isPanning = false;
-                var positions = new List<GodotNative.Vector2>(_touchPositions.Values);
-                _lastPinchDistance = positions[0].DistanceTo(positions[1]);
-                _lastTwoFingerAngle = (positions[1] - positions[0]).Angle();
+                var pts = GetTouchPositions();
+                _lastPinchDist = pts[0].DistanceTo(pts[1]);
             }
         }
         else
         {
-            if (_touchPositions.Count == 1 && _isPanning)
+            // On release: if barely moved, it's a tap
+            if (_touches.Count == 1 && !_isDragging)
             {
-                // Single tap — raycast for room selection
-                TryRaycastRoom(touch.Position, isDoubleTap: false);
+                if (touch.Position.DistanceTo(_dragStart) < 15.0f)
+                {
+                    EmitSignal(SignalName.ScreenTapped, touch.Position);
+                }
             }
-            _touchPositions.Remove(touch.Index);
-            if (_touchPositions.Count < 2) _isPanning = _touchPositions.Count == 1;
+            _touches.Remove(touch.Index);
         }
     }
 
     private void HandleDrag(GodotNative.InputEventScreenDrag drag)
     {
-        _touchPositions[drag.Index] = drag.Position;
+        _touches[drag.Index] = drag.Position;
 
-        if (_touchPositions.Count == 1 && _isPanning)
+        if (_touches.Count == 1)
         {
-            // Single finger pan
-            Pan(drag.Relative);
+            // Single finger — pan
+            if (drag.Relative.Length() > 2.0f)
+                _isDragging = true;
+
+            ApplyPan(drag.Relative);
+            GetViewport().SetInputAsHandled();
         }
-        else if (_touchPositions.Count == 2)
+        else if (_touches.Count == 2)
         {
-            var positions = new List<GodotNative.Vector2>(_touchPositions.Values);
-            float newDist = positions[0].DistanceTo(positions[1]);
-            float newAngle = (positions[1] - positions[0]).Angle();
-
             // Pinch zoom
-            float pinchDelta = newDist - _lastPinchDistance;
-            _targetDistance = GodotNative.Mathf.Clamp(
-                _targetDistance - pinchDelta * 0.05f, MinZoom, MaxZoom);
-            _lastPinchDistance = newDist;
+            var pts = GetTouchPositions();
+            float newDist = pts[0].DistanceTo(pts[1]);
+            float delta = newDist - _lastPinchDist;
 
-            // Two-finger rotate
-            float angleDelta = newAngle - _lastTwoFingerAngle;
-            _targetYaw += angleDelta;
-            _lastTwoFingerAngle = newAngle;
+            _targetOrthoSize = GodotNative.Mathf.Clamp(
+                _targetOrthoSize - delta * 0.02f,
+                MinOrthoSize, MaxOrthoSize);
+
+            _lastPinchDist = newDist;
+            GetViewport().SetInputAsHandled();
         }
     }
 
-    // ── Internals ────────────────────────────────────────────────────────────
+    // ── Internal ─────────────────────────────────────────────────────────────
 
-    private void Pan(GodotNative.Vector2 delta)
+    private void ApplyPan(GodotNative.Vector2 screenDelta)
     {
-        // Convert screen delta to world-space pan
-        float panScale = PanSpeed * _currentDistance;
-        var right = new GodotNative.Vector3(
-            GodotNative.Mathf.Cos(_currentYaw), 0,
-            -GodotNative.Mathf.Sin(_currentYaw));
-        var forward = new GodotNative.Vector3(
-            GodotNative.Mathf.Sin(_currentYaw), 0,
-            GodotNative.Mathf.Cos(_currentYaw));
+        // Scale pan by ortho size so it feels consistent at any zoom
+        float scale = PanSpeed * _currentOrthoSize / 10.0f;
 
-        _targetLookAt -= right * delta.X * panScale;
-        _targetLookAt -= forward * delta.Y * panScale;
+        // Convert screen delta to world-space using camera orientation
+        var right = new GodotNative.Vector3(
+            GodotNative.Mathf.Cos(_yawRad), 0,
+            -GodotNative.Mathf.Sin(_yawRad));
+        var forward = new GodotNative.Vector3(
+            GodotNative.Mathf.Sin(_yawRad), 0,
+            GodotNative.Mathf.Cos(_yawRad));
+
+        _targetLookAt -= right * screenDelta.X * scale;
+        _targetLookAt -= forward * screenDelta.Y * scale;
+
+        // Immediately clamp targets too (prevents overshoot)
+        if (_hasBounds)
+        {
+            _targetLookAt.X = GodotNative.Mathf.Clamp(_targetLookAt.X, _boundsMin.X, _boundsMax.X);
+            _targetLookAt.Z = GodotNative.Mathf.Clamp(_targetLookAt.Z, _boundsMin.Z, _boundsMax.Z);
+        }
     }
 
-    private void UpdateCameraPosition()
+    private void UpdateCameraTransform()
     {
-        // Spherical coordinates around look-at point
+        // Position camera on a sphere around the look-at point
         var offset = new GodotNative.Vector3(
-            _currentDistance * GodotNative.Mathf.Sin(_currentPitch) * GodotNative.Mathf.Sin(_currentYaw),
-            _currentDistance * GodotNative.Mathf.Cos(_currentPitch),
-            _currentDistance * GodotNative.Mathf.Sin(_currentPitch) * GodotNative.Mathf.Cos(_currentYaw));
+            CameraDistance * GodotNative.Mathf.Cos(_pitchRad) * GodotNative.Mathf.Sin(_yawRad),
+            CameraDistance * GodotNative.Mathf.Sin(_pitchRad),
+            CameraDistance * GodotNative.Mathf.Cos(_pitchRad) * GodotNative.Mathf.Cos(_yawRad));
 
         GlobalPosition = _currentLookAt + offset;
         LookAt(_currentLookAt, GodotNative.Vector3.Up);
     }
 
-    private void TryRaycastRoom(GodotNative.Vector2 screenPos, bool isDoubleTap)
+    private List<GodotNative.Vector2> GetTouchPositions()
     {
-        var from = ProjectRayOrigin(screenPos);
-        var to = from + ProjectRayNormal(screenPos) * 100.0f;
-
-        var spaceState = GetWorld3D().DirectSpaceState;
-        var query = GodotNative.PhysicsRayQueryParameters3D.Create(from, to);
-        var result = spaceState.IntersectRay(query);
-
-        if (result.Count > 0)
-        {
-            var collider = result["collider"].AsGodotObject();
-            if (collider is GodotNative.Node3D node && node.HasMeta("room_id"))
-            {
-                string roomId = node.GetMeta("room_id").AsString();
-                if (isDoubleTap)
-                    EmitSignal(SignalName.RoomDoubleTapped, roomId);
-                else
-                    EmitSignal(SignalName.RoomTapped, roomId);
-            }
-        }
+        return new List<GodotNative.Vector2>(_touches.Values);
     }
 }

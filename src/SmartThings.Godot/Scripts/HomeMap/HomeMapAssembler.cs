@@ -35,8 +35,7 @@ public partial class HomeMapAssembler : GodotNative.Node3D
         // Wire camera signals
         if (_camera != null)
         {
-            _camera.RoomTapped += OnRoomTapped;
-            _camera.RoomDoubleTapped += OnRoomDoubleTapped;
+            _camera.ScreenTapped += OnScreenTapped;
         }
 
         if (_pinManager != null)
@@ -65,6 +64,9 @@ public partial class HomeMapAssembler : GodotNative.Node3D
             {
                 _floorMaterials[room.RoomId] = mat;
             }
+
+            // Add floating room name label
+            AddRoomLabel(roomNode, room);
         }
 
         // Spawn device pins
@@ -112,21 +114,32 @@ public partial class HomeMapAssembler : GodotNative.Node3D
 
     // ── Event handlers ───────────────────────────────────────────────────────
 
-    private void OnRoomTapped(string roomId)
+    private void OnScreenTapped(GodotNative.Vector2 screenPos)
     {
-        SelectRoom(roomId);
-    }
+        // Raycast from camera to find which room/device was tapped
+        if (_camera == null) return;
 
-    private void OnRoomDoubleTapped(string roomId)
-    {
-        SelectRoom(roomId);
+        var from = _camera.ProjectRayOrigin(screenPos);
+        var to = from + _camera.ProjectRayNormal(screenPos) * 100.0f;
 
-        // Zoom camera to fit the room
-        if (_roomNodes.TryGetValue(roomId, out var roomNode))
+        var spaceState = _camera.GetWorld3D().DirectSpaceState;
+        var query = GodotNative.PhysicsRayQueryParameters3D.Create(from, to);
+        var result = spaceState.IntersectRay(query);
+
+        if (result.Count > 0)
         {
-            var aabb = CalculateNodeBounds(roomNode);
-            _camera?.ZoomToFit(aabb.GetCenter(), aabb.GetLongestAxisSize() * 0.5f);
+            var collider = result["collider"].AsGodotObject();
+            if (collider is GodotNative.Node3D node && node.HasMeta("room_id"))
+            {
+                string roomId = node.GetMeta("room_id").AsString();
+                SelectRoom(roomId);
+                return;
+            }
         }
+
+        // Tapped empty space — deselect
+        SelectRoom(null);
+        _ui?.HidePopups();
     }
 
     private void OnDevicePinTapped(string deviceId)
@@ -136,6 +149,58 @@ public partial class HomeMapAssembler : GodotNative.Node3D
         {
             GodotNative.GD.Print($"[HomeMap] Device tapped: {device.Label} ({device.Category})");
             _ui?.ShowDevicePopup(device);
+        }
+    }
+
+    // ── Room labels ────────────────────────────────────────────────────────
+
+    private void AddRoomLabel(GodotNative.Node3D roomNode, SmartRoom room)
+    {
+        if (room.FloorPolygon == null || room.FloorPolygon.Count < 3) return;
+
+        // Calculate center of room polygon
+        float cx = 0, cz = 0;
+        foreach (var p in room.FloorPolygon)
+        {
+            cx += p.X;
+            cz += p.Y;
+        }
+        cx /= room.FloorPolygon.Count;
+        cz /= room.FloorPolygon.Count;
+
+        // Create a Label3D floating above the floor
+        var label = new GodotNative.Label3D();
+        label.Text = room.Name;
+        label.FontSize = 72;
+        label.OutlineSize = 8;
+        label.Modulate = new GodotNative.Color(0.2f, 0.2f, 0.25f, 1.0f);
+        label.OutlineModulate = new GodotNative.Color(1, 1, 1, 0.7f);
+        label.Position = new GodotNative.Vector3(cx, 0.05f, cz);
+        // Face upward so it's readable from isometric view
+        label.RotationDegrees = new GodotNative.Vector3(-90, 0, 0);
+        label.Billboard = GodotNative.BaseMaterial3D.BillboardModeEnum.Disabled;
+        label.PixelSize = 0.005f;
+        label.NoDepthTest = true; // Always visible through walls
+        label.FixedSize = false;
+
+        roomNode.AddChild(label);
+
+        // Also add device count below room name
+        int deviceCount = room.DeviceIds?.Count ?? room.Devices.Count;
+        if (deviceCount > 0)
+        {
+            var countLabel = new GodotNative.Label3D();
+            countLabel.Text = $"{deviceCount} device{(deviceCount != 1 ? "s" : "")}";
+            countLabel.FontSize = 48;
+            countLabel.Modulate = new GodotNative.Color(0.4f, 0.4f, 0.45f, 0.8f);
+            countLabel.Position = new GodotNative.Vector3(cx, 0.04f, cz + 0.5f);
+            countLabel.RotationDegrees = new GodotNative.Vector3(-90, 0, 0);
+            countLabel.Billboard = GodotNative.BaseMaterial3D.BillboardModeEnum.Disabled;
+            countLabel.PixelSize = 0.004f;
+            countLabel.NoDepthTest = true;
+            countLabel.FixedSize = false;
+
+            roomNode.AddChild(countLabel);
         }
     }
 
@@ -161,9 +226,12 @@ public partial class HomeMapAssembler : GodotNative.Node3D
             }
         }
 
+        // Set camera bounds and center view
+        _camera?.SetBounds(minPos, maxPos);
+
         var center = (minPos + maxPos) * 0.5f;
-        float radius = (maxPos - minPos).Length() * 0.5f;
-        _camera?.ZoomToFit(center, radius);
+        float span = GodotNative.Mathf.Max(maxPos.X - minPos.X, maxPos.Z - minPos.Z);
+        _camera?.FocusOn(center, span * 0.6f);
     }
 
     private static GodotNative.Aabb CalculateNodeBounds(GodotNative.Node3D node)

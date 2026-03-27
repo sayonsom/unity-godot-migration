@@ -10,15 +10,15 @@ public static class RoomColorPalette
 {
     private static readonly Dictionary<RoomType, Color> _colors = new()
     {
-        { RoomType.LivingRoom, Color.FromHex("E8D5B7") },  // Warm beige
-        { RoomType.Kitchen,    Color.FromHex("F0E6D3") },  // Light cream
-        { RoomType.Bedroom,    Color.FromHex("D4C5E2") },  // Soft lavender
-        { RoomType.Bathroom,   Color.FromHex("C5DAE8") },  // Light blue
-        { RoomType.Hallway,    Color.FromHex("D9D9D9") },  // Neutral gray
-        { RoomType.Balcony,    Color.FromHex("C8E6C9") },  // Pale green
-        { RoomType.Office,     Color.FromHex("FFE0B2") },  // Warm peach
+        { RoomType.LivingRoom, Color.FromHex("90EE90") },  // Bright green (like SmartThings)
+        { RoomType.Kitchen,    Color.FromHex("FFEB8A") },  // Warm yellow
+        { RoomType.Bedroom,    Color.FromHex("FFB6C1") },  // Bright pink
+        { RoomType.Bathroom,   Color.FromHex("87CEEB") },  // Sky blue
+        { RoomType.Hallway,    Color.FromHex("C8E6C9") },  // Light green
+        { RoomType.Balcony,    Color.FromHex("B39DDB") },  // Purple/deck
+        { RoomType.Office,     Color.FromHex("80CBC4") },  // Teal
         { RoomType.Garage,     Color.FromHex("BCAAA4") },  // Warm gray
-        { RoomType.Laundry,    Color.FromHex("B3E5FC") },  // Sky blue
+        { RoomType.Laundry,    Color.FromHex("90CAF9") },  // Blue
         { RoomType.Custom,     Color.FromHex("E0E0E0") },  // Default gray
     };
 

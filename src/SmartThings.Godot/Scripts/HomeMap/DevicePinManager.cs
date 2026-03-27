@@ -78,18 +78,19 @@ public partial class DevicePinManager : GodotNative.Node3D
     private void SpawnPin(DevicePlacement placement, SmartDevice device)
     {
         var mesh = new GodotNative.QuadMesh();
-        mesh.Size = new GodotNative.Vector2(0.6f, 0.6f) * placement.IconScale;
+        mesh.Size = new GodotNative.Vector2(0.8f, 0.8f) * placement.IconScale;
 
         var mat = CreatePinMaterial(device);
         var instance = new GodotNative.MeshInstance3D();
         instance.Mesh = mesh;
         instance.MaterialOverride = mat;
+        instance.CastShadow = GodotNative.GeometryInstance3D.ShadowCastingSetting.Off;
         instance.Name = $"Pin_{device.DeviceId}";
 
-        // Position above the floor
+        // Position well above the floor so it's visible from isometric view
         instance.Position = new GodotNative.Vector3(
             placement.Position.X,
-            placement.Position.Y + 0.5f,  // Float above surface
+            placement.Position.Y + 1.5f,  // Float well above walls
             placement.Position.Z);
 
         // Add Area3D for tap detection
