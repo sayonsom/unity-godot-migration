@@ -102,6 +102,12 @@ public partial class HomeMapAssembler : GodotNative.Node3D
         }
     }
 
+    /// <summary>Get the Node3D for a specific room (for accessibility registration).</summary>
+    public GodotNative.Node3D? GetRoomNode(string roomId)
+    {
+        return _roomNodes.TryGetValue(roomId, out var node) ? node : null;
+    }
+
     /// <summary>Clear all generated room geometry.</summary>
     public void ClearHome()
     {

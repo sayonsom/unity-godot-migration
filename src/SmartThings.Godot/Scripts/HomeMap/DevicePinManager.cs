@@ -64,6 +64,38 @@ public partial class DevicePinManager : GodotNative.Node3D
         }
     }
 
+    /// <summary>Get the Node3D for a specific device pin (for accessibility registration).</summary>
+    public GodotNative.Node3D? GetPinNode(string deviceId)
+    {
+        return _pins.TryGetValue(deviceId, out var pin) ? pin : null;
+    }
+
+    /// <summary>Update a device's visual state from an IoT event.</summary>
+    public void UpdateDeviceState(string deviceId, string capability, string value)
+    {
+        if (!_pinMaterials.TryGetValue(deviceId, out var mat)) return;
+
+        // Update pin visual based on capability change
+        bool isActive = value is "on" or "online" or "active" or "locked" or "open";
+        mat.SetShaderParameter("is_active", isActive);
+
+        if (value is "error" or "offline")
+        {
+            mat.SetShaderParameter("status_color",
+                new GodotNative.Color(0.96f, 0.26f, 0.21f, 1.0f)); // Red
+        }
+        else if (isActive)
+        {
+            mat.SetShaderParameter("status_color",
+                new GodotNative.Color(0.3f, 0.69f, 0.31f, 1.0f)); // Green
+        }
+        else
+        {
+            mat.SetShaderParameter("status_color",
+                new GodotNative.Color(0.62f, 0.62f, 0.62f, 1.0f)); // Gray
+        }
+    }
+
     /// <summary>Remove all pins.</summary>
     public void ClearPins()
     {
