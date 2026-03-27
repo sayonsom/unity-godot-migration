@@ -60,6 +60,11 @@ Thumbs.db
 *.aab
 *.keystore
 !debug.keystore
+**/android/build/.gradle/
+**/android/build/build/
+**/android/build/libs/
+**/android/build/src/main/assets/
+**/android/build/src/instrumented/
 
 # --- Audit outputs ---
 *-dependency-audit.json
