@@ -1,7 +1,5 @@
-[gd_scene load_steps=8 format=3 uid="uid://thermostat_scene"]
+[gd_scene load_steps=7 format=3 uid="uid://thermostat_scene"]
 
-[ext_resource type="Shader" path="res://Shaders/device_state_glow.gdshader" id="1_glow"]
-[ext_resource type="Shader" path="res://Shaders/energy_flow.gdshader" id="2_energy"]
 [ext_resource type="Script" path="res://Scripts/ThermostatController.cs" id="3_controller"]
 [ext_resource type="Script" path="res://Scripts/ThermostatUI.cs" id="4_ui"]
 

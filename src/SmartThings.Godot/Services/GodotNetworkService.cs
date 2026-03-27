@@ -29,7 +29,7 @@ public partial class GodotNetworkService : GodotNative.Node, INetworkService
     private readonly System.Timers.Timer _connectivityTimer;
 
     public ISmartThingsHttpClient Http => _http ??= new SmartThingsHttpClient();
-    public IMqttClient Mqtt => _mqtt ??= new GodotMqttClient();
+    public Abstraction.Interfaces.IMqttClient Mqtt => _mqtt ??= new GodotMqttClient();
     public ICoapClient Coap => _coap ??= new GodotCoapClient();
     public bool IsNetworkAvailable => _isNetworkAvailable;
 
@@ -271,7 +271,7 @@ internal class GodotCoapClient : ICoapClient
     private const byte MethodPost = 2;
     private const byte MethodPut = 3;
 
-    private ushort _messageId;
+    private int _messageId;
 
     public async Task<CoapResponse> GetAsync(string uri, CancellationToken ct = default)
     {

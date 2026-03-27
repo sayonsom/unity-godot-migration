@@ -41,7 +41,7 @@ public partial class GodotAccessibilityService : GodotNative.Node, IAccessibilit
     {
         // Godot 4.5: Use DisplayServer.tts_speak() for text-to-speech
         // This bridges to platform TTS (Android TalkBack, Windows Narrator, etc.)
-        var utteranceId = GodotNative.DisplayServer.TtsSpeak(
+        GodotNative.DisplayServer.TtsSpeak(
             text,
             voice: "",
             volume: 100,

@@ -4,6 +4,7 @@
 // =============================================================================
 
 using SmartThings.Abstraction.Interfaces;
+using AbstractProcessMode = SmartThings.Abstraction.Interfaces.ProcessMode;
 using GodotNative = Godot;
 
 namespace SmartThings.Godot.Services;
@@ -112,7 +113,7 @@ public partial class GodotSceneService : GodotNative.Node, ISceneService
         }
     }
 
-    public IDisposable RegisterProcessCallback(Action<float> callback, ProcessMode mode = ProcessMode.Idle)
+    public IDisposable RegisterProcessCallback(Action<float> callback, AbstractProcessMode mode = AbstractProcessMode.Idle)
     {
         var callbackNode = new ProcessCallbackNode(callback, isPhysics: false);
         AddChild(callbackNode);
