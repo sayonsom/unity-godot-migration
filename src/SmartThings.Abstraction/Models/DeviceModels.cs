@@ -64,7 +64,13 @@ public record SmartRoom(
     string RoomId,
     string Name,
     IReadOnlyList<SmartDevice> Devices,
-    RoomLayout? Layout = null
+    RoomLayout? Layout = null,
+    RoomType RoomType = RoomType.Custom,
+    IReadOnlyList<Vector2>? FloorPolygon = null,
+    float FloorY = 0f,
+    float WallHeight = 2.8f,
+    IReadOnlyList<WallSegment>? WallSegments = null,
+    IReadOnlyList<string>? DeviceIds = null
 );
 
 /// <summary>Spatial layout metadata for 3D room visualization.</summary>
