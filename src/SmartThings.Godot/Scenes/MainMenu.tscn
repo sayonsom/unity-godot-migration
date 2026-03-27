@@ -1,10 +1,13 @@
-[gd_scene format=3 uid="uid://main_menu_scene"]
+[gd_scene load_steps=2 format=3 uid="uid://main_menu_scene"]
+
+[ext_resource type="Script" path="res://Scripts/MainMenuController.cs" id="1_menu"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+script = ExtResource("1_menu")
 
 [node name="VBox" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -26,11 +29,15 @@ text = "SmartThings Home"
 [node name="Subtitle" type="Label" parent="VBox"]
 layout_mode = 2
 horizontal_alignment = 1
-text = "Select a device to visualize"
+text = "Select a demo to run"
 
 [node name="ThermostatBtn" type="Button" parent="VBox"]
 layout_mode = 2
 text = "Living Room Thermostat"
+
+[node name="ApartmentBtn" type="Button" parent="VBox"]
+layout_mode = 2
+text = "3D Apartment Walkthrough"
 
 [node name="Spacer" type="Control" parent="VBox"]
 layout_mode = 2
