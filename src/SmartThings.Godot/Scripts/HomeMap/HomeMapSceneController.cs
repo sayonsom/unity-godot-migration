@@ -33,6 +33,7 @@ public partial class HomeMapSceneController : GodotNative.Node3D
     private PushToTalkUI? _pttUI;
     private HomeMapAccessibilityManager? _a11yManager;
     private AccessibleDeviceAnnouncer? _deviceAnnouncer;
+    private AccessibilityTestPanel? _a11yTestPanel;
     private SmartThingsEventBus? _eventBus;
 
     // Services (would come from DI in production)
@@ -96,7 +97,71 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         // Register voice commands for accessibility
         RegisterVoiceCommands();
 
-        GodotNative.GD.Print("[A11y] Accessibility system initialized");
+        // Accessibility test panel (on-screen buttons for testing on phone)
+        _a11yTestPanel = new AccessibilityTestPanel();
+        var uiLayerA11y = GetNode<GodotNative.CanvasLayer>("UIOverlay");
+        uiLayerA11y.AddChild(_a11yTestPanel);
+        _a11yTestPanel.Initialize(_a11yManager, _a11yService, _home!);
+
+        // Wire test panel signals
+        _a11yTestPanel.TestVoiceCommand += OnTestVoiceCommand;
+        _a11yTestPanel.TestDeviceEvent += OnTestDeviceEvent;
+
+        // Wire focus changes back to the test panel
+        _a11yManager.RoomFocused += (roomId) =>
+        {
+            var room = _home?.Rooms.Find(r => r.RoomId == roomId);
+            if (room != null)
+            {
+                var idx = _home!.Rooms.IndexOf(room);
+                _a11yTestPanel.UpdateFocusInfo(room.Name, "Room", idx, _home.Rooms.Count);
+            }
+        };
+        _a11yManager.DeviceFocused += (deviceId) =>
+        {
+            var device = _home?.Devices.Find(d => d.DeviceId == deviceId);
+            if (device != null)
+            {
+                var idx = _home!.Devices.IndexOf(device);
+                _a11yTestPanel.UpdateFocusInfo(device.Label, "Device", idx, _home.Devices.Count);
+            }
+        };
+
+        GodotNative.GD.Print("[A11y] Accessibility system initialized with test panel");
+    }
+
+    private void OnTestVoiceCommand(string command)
+    {
+        GodotNative.GD.Print($"[A11y Test] Voice command: \"{command}\"");
+
+        // Feed directly to intent parser pipeline
+        var intent = new SmartHomeIntentParser();
+        intent.SetHome(_home!);
+        var parsed = intent.Parse(command);
+
+        if (parsed != null)
+        {
+            _a11yService?.Announce($"Parsed: {parsed.Description}", AnnouncePriority.Normal);
+            _a11yTestPanel?.SetStatus($"Intent: {parsed.Type} — {parsed.Description}");
+
+            // Execute navigation intents
+            if (parsed.Type == IntentType.RoomNavigation && parsed.Room != null)
+            {
+                _assembler?.SelectRoom(parsed.Room.RoomId);
+                _a11yManager?.FocusElement(parsed.Room.RoomId);
+            }
+        }
+        else
+        {
+            _a11yService?.Announce($"Could not parse: {command}", AnnouncePriority.Normal);
+            _a11yTestPanel?.SetStatus($"No intent for: \"{command}\"");
+        }
+    }
+
+    private void OnTestDeviceEvent(string deviceId, string capability, string value)
+    {
+        GodotNative.GD.Print($"[A11y Test] Device event: {deviceId} → {capability}={value}");
+        _eventBus?.SimulateDeviceEvent(deviceId, capability, value);
     }
 
     private void RegisterAccessibleElements()

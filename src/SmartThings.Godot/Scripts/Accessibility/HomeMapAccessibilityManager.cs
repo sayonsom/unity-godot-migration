@@ -34,6 +34,16 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
     private GodotNative.MeshInstance3D? _focusRingMesh;
     private float _focusRingPhase;
 
+    // Touch swipe gesture detection (for phone a11y without TalkBack)
+    private GodotNative.Vector2 _touchStartPos;
+    private bool _touchActive;
+    private double _touchStartTime;
+    private const float SwipeThreshold = 80f;  // minimum pixels for a swipe
+    private const float SwipeMaxTime = 0.5f;   // seconds — fast flick only
+    private const float DoubleTapMaxTime = 0.4f;
+    private double _lastTapTime;
+    private int _tapCount;
+
     /// <summary>Fired when a room is focused via accessibility navigation.</summary>
     [GodotNative.Signal] public delegate void RoomFocusedEventHandler(string roomId);
 
@@ -198,6 +208,63 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
                     ActivateFocused();
                     GetViewport().SetInputAsHandled();
                     break;
+            }
+        }
+
+        // Touch swipe gestures for phone accessibility navigation
+        // Swipe right → next, Swipe left → previous, Double-tap → activate
+        if (@event is GodotNative.InputEventScreenTouch touch)
+        {
+            if (touch.Pressed)
+            {
+                _touchStartPos = touch.Position;
+                _touchActive = true;
+                _touchStartTime = GodotNative.Time.GetTicksMsec() / 1000.0;
+            }
+            else if (_touchActive)
+            {
+                _touchActive = false;
+                var elapsed = GodotNative.Time.GetTicksMsec() / 1000.0 - _touchStartTime;
+                var delta = touch.Position - _touchStartPos;
+                var absX = MathF.Abs(delta.X);
+                var absY = MathF.Abs(delta.Y);
+
+                if (absX > SwipeThreshold && absX > absY * 1.5f && elapsed < SwipeMaxTime)
+                {
+                    // Horizontal swipe detected
+                    if (delta.X > 0)
+                    {
+                        FocusNext();
+                        GodotNative.GD.Print("[A11y] Swipe right → next");
+                    }
+                    else
+                    {
+                        FocusPrevious();
+                        GodotNative.GD.Print("[A11y] Swipe left → previous");
+                    }
+                    GetViewport().SetInputAsHandled();
+                }
+                else if (absX < 30 && absY < 30 && elapsed < 0.3)
+                {
+                    // Tap detected — check for double-tap
+                    var now = GodotNative.Time.GetTicksMsec() / 1000.0;
+                    if (now - _lastTapTime < DoubleTapMaxTime)
+                    {
+                        _tapCount++;
+                        if (_tapCount >= 2)
+                        {
+                            ActivateFocused();
+                            _tapCount = 0;
+                            GodotNative.GD.Print("[A11y] Double-tap → activate");
+                            GetViewport().SetInputAsHandled();
+                        }
+                    }
+                    else
+                    {
+                        _tapCount = 1;
+                    }
+                    _lastTapTime = now;
+                }
             }
         }
     }
