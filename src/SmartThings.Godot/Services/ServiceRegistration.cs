@@ -47,11 +47,33 @@ public static class ServiceRegistration
             return a11yService;
         });
 
-        // TODO: Implement and register these as they're built in each phase
-        // services.AddSingleton<IInputService, GodotInputService>();
-        // services.AddSingleton<IAudioService, GodotAudioService>();
-        // services.AddSingleton<INetworkService, GodotNetworkService>();
-        // services.AddSingleton<ISceneService, GodotSceneService>();
+        services.AddSingleton<IInputService>(sp =>
+        {
+            var inputService = new GodotInputService();
+            sceneRoot.AddChild(inputService);
+            return inputService;
+        });
+
+        services.AddSingleton<IAudioService>(sp =>
+        {
+            var audioService = new GodotAudioService();
+            sceneRoot.AddChild(audioService);
+            return audioService;
+        });
+
+        services.AddSingleton<INetworkService>(sp =>
+        {
+            var networkService = new GodotNetworkService();
+            sceneRoot.AddChild(networkService);
+            return networkService;
+        });
+
+        services.AddSingleton<ISceneService>(sp =>
+        {
+            var sceneService = new GodotSceneService();
+            sceneRoot.AddChild(sceneService);
+            return sceneService;
+        });
 
         return services;
     }

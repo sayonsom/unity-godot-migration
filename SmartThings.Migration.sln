@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{330D9DA4-835F-4FDA-A0DC-50DA66F65243}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartThings.Abstraction", "src\SmartThings.Abstraction\SmartThings.Abstraction.csproj", "{B4F93014-4288-4818-866D-35AD362D4A4A}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmartThings.Tests", "src\SmartThings.Tests\SmartThings.Tests.csproj", "{811EC1E5-110B-430A-8F76-B1396F49AA3D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B4F93014-4288-4818-866D-35AD362D4A4A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B4F93014-4288-4818-866D-35AD362D4A4A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B4F93014-4288-4818-866D-35AD362D4A4A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B4F93014-4288-4818-866D-35AD362D4A4A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{811EC1E5-110B-430A-8F76-B1396F49AA3D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{811EC1E5-110B-430A-8F76-B1396F49AA3D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{811EC1E5-110B-430A-8F76-B1396F49AA3D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{811EC1E5-110B-430A-8F76-B1396F49AA3D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B4F93014-4288-4818-866D-35AD362D4A4A} = {330D9DA4-835F-4FDA-A0DC-50DA66F65243}
+		{811EC1E5-110B-430A-8F76-B1396F49AA3D} = {330D9DA4-835F-4FDA-A0DC-50DA66F65243}
+	EndGlobalSection
+EndGlobal
