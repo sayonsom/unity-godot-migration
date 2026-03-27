@@ -1,6 +1,6 @@
 // =============================================================================
-// MockHomeProvider.cs — SmartThings-style home layout matching reference images
-// 10 rooms with bright colors, realistic layout, ~22 devices
+// MockHomeProvider.cs — Simplified home layout for testing
+// 7 rooms: 3 bedrooms, 1 living room, 1 kitchen, 2 balconies
 // =============================================================================
 
 using SmartThings.Abstraction;
@@ -9,8 +9,7 @@ using SmartThings.Abstraction.Models;
 namespace SmartThings.Godot.Data;
 
 /// <summary>
-/// Provides mock SmartHome data matching the SmartThings Map View reference.
-/// Layout inspired by the reference screenshots: top-down apartment view.
+/// Provides mock SmartHome data with a clean 7-room apartment layout.
 /// </summary>
 public static class MockHomeProvider
 {
@@ -32,144 +31,112 @@ public static class MockHomeProvider
 
     private static List<SmartRoom> CreateRooms(List<SmartDevice> devices)
     {
-        // Layout matching SmartThings reference (12x10 meters):
+        // Clean apartment layout (12m x 8m):
         //
-        // ┌──────────┬──────────┬──────────┬───────────┐
-        // │ Media    │  Deck    │ Kitchen  │ Primary   │
-        // │ room     │          │          │ suite     │
-        // │ (blue)   │(purple)  │(yellow)  │ (teal)    │
-        // ├──────────┼──────────┤          ├───────────┤
-        // │          │ Living   │          │           │
-        // │          │ room     ├──────────┤           │
-        // │          │ (green)  │          │           │
-        // ├──────────┼──────────┼──────────┼─────┬─────┤
-        // │ Bedroom  │  Porch   │ Dining   │Laun-│Bath-│
-        // │ (pink)   │(lt green)│ (blue)   │dry  │room │
-        // └──────────┴──────────┴──────────┴─────┴─────┘
+        // ┌──────────┬──────────┬──────────┐
+        // │ Bedroom 1│  Living  │ Kitchen  │
+        // │  (pink)  │  room    │ (yellow) │
+        // │  4x4     │ (green)  │  4x4     │
+        // │          │  4x4     │          │
+        // ├──────────┼──────────┼──────────┤
+        // │ Bedroom 2│ Bedroom 3│ Balcony 1│
+        // │  (pink)  │  (pink)  │ (purple) │
+        // │  4x4     │  4x4     │  4x4     │
+        // │          │          │          │
+        // └──────────┴──────────┴──────────┘
+        //                       ┌──────────┐
+        //                       │ Balcony 2│
+        //                       │ (purple) │
+        //                       │  4x2     │
+        //                       └──────────┘
 
         return new List<SmartRoom>
         {
             // Top row
-            new("room_media", "Media room",
-                devices.Where(d => d.RoomId == "room_media").ToList(),
-                RoomType: RoomType.Bedroom,  // Blue color via Bedroom→ we override
-                FloorPolygon: new List<Vector2> { new(0, 0), new(4, 0), new(4, 5), new(0, 5) },
+            new("room_bed1", "Bedroom 1",
+                devices.Where(d => d.RoomId == "room_bed1").ToList(),
+                RoomType: RoomType.Bedroom,
+                FloorPolygon: new List<Vector2> { new(0, 0), new(4, 0), new(4, 4), new(0, 4) },
                 WallSegments: new List<WallSegment>
                 {
                     new(new(0, 0), new(4, 0)),
-                    new(new(4, 0), new(4, 5), HasDoor: true, DoorWidth: 1.0f),
-                    new(new(4, 5), new(0, 5)),
-                    new(new(0, 5), new(0, 0)),
+                    new(new(4, 0), new(4, 4), HasDoor: true, DoorWidth: 0.9f),
+                    new(new(4, 4), new(0, 4)),
+                    new(new(0, 4), new(0, 0)),
                 }),
 
-            new("room_deck", "Deck",
-                devices.Where(d => d.RoomId == "room_deck").ToList(),
-                RoomType: RoomType.Balcony,  // Purple
-                FloorPolygon: new List<Vector2> { new(4, 0), new(7, 0), new(7, 3), new(4, 3) },
+            new("room_living", "Living room",
+                devices.Where(d => d.RoomId == "room_living").ToList(),
+                RoomType: RoomType.LivingRoom,
+                FloorPolygon: new List<Vector2> { new(4, 0), new(8, 0), new(8, 4), new(4, 4) },
                 WallSegments: new List<WallSegment>
                 {
-                    new(new(4, 0), new(7, 0)),
-                    new(new(7, 0), new(7, 3)),
-                    new(new(7, 3), new(4, 3), HasDoor: true, DoorWidth: 1.2f),
-                    new(new(4, 3), new(4, 0)),
+                    new(new(4, 0), new(8, 0)),
+                    new(new(8, 0), new(8, 4), HasDoor: true, DoorWidth: 1.0f),
+                    new(new(8, 4), new(4, 4), HasDoor: true, DoorWidth: 1.0f),
+                    new(new(4, 4), new(4, 0), HasDoor: true, DoorWidth: 1.0f),
                 }),
 
             new("room_kitchen", "Kitchen",
                 devices.Where(d => d.RoomId == "room_kitchen").ToList(),
-                RoomType: RoomType.Kitchen,  // Yellow
-                FloorPolygon: new List<Vector2> { new(7, 0), new(10, 0), new(10, 5), new(7, 5) },
+                RoomType: RoomType.Kitchen,
+                FloorPolygon: new List<Vector2> { new(8, 0), new(12, 0), new(12, 4), new(8, 4) },
                 WallSegments: new List<WallSegment>
                 {
-                    new(new(7, 0), new(10, 0)),
-                    new(new(10, 0), new(10, 5), HasDoor: true, DoorWidth: 1.0f),
-                    new(new(10, 5), new(7, 5)),
-                    new(new(7, 5), new(7, 0)),
-                }),
-
-            new("room_primary", "Primary suite",
-                devices.Where(d => d.RoomId == "room_primary").ToList(),
-                RoomType: RoomType.Office,  // Teal
-                FloorPolygon: new List<Vector2> { new(10, 0), new(14, 0), new(14, 5), new(10, 5) },
-                WallSegments: new List<WallSegment>
-                {
-                    new(new(10, 0), new(14, 0)),
-                    new(new(14, 0), new(14, 5)),
-                    new(new(14, 5), new(10, 5), HasDoor: true, DoorWidth: 0.9f),
-                    new(new(10, 5), new(10, 0)),
-                }),
-
-            // Middle
-            new("room_living", "Living room",
-                devices.Where(d => d.RoomId == "room_living").ToList(),
-                RoomType: RoomType.LivingRoom,  // Green
-                FloorPolygon: new List<Vector2> { new(4, 3), new(10, 3), new(10, 7), new(4, 7) },
-                WallSegments: new List<WallSegment>
-                {
-                    new(new(4, 3), new(10, 3)),
-                    new(new(10, 3), new(10, 7), HasDoor: true, DoorWidth: 1.2f),
-                    new(new(10, 7), new(4, 7), HasDoor: true, DoorWidth: 1.0f),
-                    new(new(4, 7), new(4, 3), HasDoor: true, DoorWidth: 1.0f),
+                    new(new(8, 0), new(12, 0)),
+                    new(new(12, 0), new(12, 4)),
+                    new(new(12, 4), new(8, 4), HasDoor: true, DoorWidth: 1.0f),
+                    new(new(8, 4), new(8, 0), HasDoor: true, DoorWidth: 1.0f),
                 }),
 
             // Bottom row
-            new("room_bedroom", "Bedroom",
-                devices.Where(d => d.RoomId == "room_bedroom").ToList(),
-                RoomType: RoomType.Bedroom,  // Pink
-                FloorPolygon: new List<Vector2> { new(0, 5), new(4, 5), new(4, 10), new(0, 10) },
+            new("room_bed2", "Bedroom 2",
+                devices.Where(d => d.RoomId == "room_bed2").ToList(),
+                RoomType: RoomType.Bedroom,
+                FloorPolygon: new List<Vector2> { new(0, 4), new(4, 4), new(4, 8), new(0, 8) },
                 WallSegments: new List<WallSegment>
                 {
-                    new(new(0, 5), new(4, 5)),
-                    new(new(4, 5), new(4, 10), HasDoor: true, DoorWidth: 0.9f),
-                    new(new(4, 10), new(0, 10)),
-                    new(new(0, 10), new(0, 5)),
+                    new(new(0, 4), new(4, 4)),
+                    new(new(4, 4), new(4, 8), HasDoor: true, DoorWidth: 0.9f),
+                    new(new(4, 8), new(0, 8)),
+                    new(new(0, 8), new(0, 4)),
                 }),
 
-            new("room_porch", "Porch",
-                devices.Where(d => d.RoomId == "room_porch").ToList(),
-                RoomType: RoomType.Hallway,  // Light green
-                FloorPolygon: new List<Vector2> { new(4, 7), new(7, 7), new(7, 10), new(4, 10) },
+            new("room_bed3", "Bedroom 3",
+                devices.Where(d => d.RoomId == "room_bed3").ToList(),
+                RoomType: RoomType.Bedroom,
+                FloorPolygon: new List<Vector2> { new(4, 4), new(8, 4), new(8, 8), new(4, 8) },
                 WallSegments: new List<WallSegment>
                 {
-                    new(new(4, 7), new(7, 7)),
-                    new(new(7, 7), new(7, 10), HasDoor: true, DoorWidth: 1.0f),
-                    new(new(7, 10), new(4, 10)),
-                    new(new(4, 10), new(4, 7)),
+                    new(new(4, 4), new(8, 4)),
+                    new(new(8, 4), new(8, 8), HasDoor: true, DoorWidth: 0.9f),
+                    new(new(8, 8), new(4, 8)),
+                    new(new(4, 8), new(4, 4), HasDoor: true, DoorWidth: 0.9f),
                 }),
 
-            new("room_dining", "Dining room",
-                devices.Where(d => d.RoomId == "room_dining").ToList(),
-                RoomType: RoomType.Bathroom,  // Blue
-                FloorPolygon: new List<Vector2> { new(7, 5), new(11, 5), new(11, 10), new(7, 10) },
+            // Balconies
+            new("room_balcony1", "Balcony 1",
+                devices.Where(d => d.RoomId == "room_balcony1").ToList(),
+                RoomType: RoomType.Balcony,
+                FloorPolygon: new List<Vector2> { new(8, 4), new(12, 4), new(12, 8), new(8, 8) },
                 WallSegments: new List<WallSegment>
                 {
-                    new(new(7, 5), new(11, 5)),
-                    new(new(11, 5), new(11, 10)),
-                    new(new(11, 10), new(7, 10)),
-                    new(new(7, 10), new(7, 5), HasDoor: true, DoorWidth: 1.0f),
+                    new(new(8, 4), new(12, 4)),
+                    new(new(12, 4), new(12, 8)),
+                    new(new(12, 8), new(8, 8)),
+                    new(new(8, 8), new(8, 4), HasDoor: true, DoorWidth: 1.2f),
                 }),
 
-            new("room_laundry", "Laundry room",
-                devices.Where(d => d.RoomId == "room_laundry").ToList(),
-                RoomType: RoomType.Laundry,  // Blue
-                FloorPolygon: new List<Vector2> { new(11, 5), new(14, 5), new(14, 7.5f), new(11, 7.5f) },
+            new("room_balcony2", "Balcony 2",
+                devices.Where(d => d.RoomId == "room_balcony2").ToList(),
+                RoomType: RoomType.Balcony,
+                FloorPolygon: new List<Vector2> { new(8, 8), new(12, 8), new(12, 10), new(8, 10) },
                 WallSegments: new List<WallSegment>
                 {
-                    new(new(11, 5), new(14, 5)),
-                    new(new(14, 5), new(14, 7.5f)),
-                    new(new(14, 7.5f), new(11, 7.5f)),
-                    new(new(11, 7.5f), new(11, 5), HasDoor: true, DoorWidth: 0.8f),
-                }),
-
-            new("room_bathroom", "Bathroom",
-                devices.Where(d => d.RoomId == "room_bathroom").ToList(),
-                RoomType: RoomType.Bathroom,  // Sky blue (lighter)
-                FloorPolygon: new List<Vector2> { new(11, 7.5f), new(14, 7.5f), new(14, 10), new(11, 10) },
-                WallSegments: new List<WallSegment>
-                {
-                    new(new(11, 7.5f), new(14, 7.5f)),
-                    new(new(14, 7.5f), new(14, 10)),
-                    new(new(14, 10), new(11, 10)),
-                    new(new(11, 10), new(11, 7.5f), HasDoor: true, DoorWidth: 0.8f),
+                    new(new(8, 8), new(12, 8)),
+                    new(new(12, 8), new(12, 10)),
+                    new(new(12, 10), new(8, 10)),
+                    new(new(8, 10), new(8, 8), HasDoor: true, DoorWidth: 1.2f),
                 }),
         };
     }
@@ -178,51 +145,36 @@ public static class MockHomeProvider
     {
         return new List<SmartDevice>
         {
-            // Media room
-            CreateDevice("dev_tv", "Smart TV", DeviceCategory.Television, "room_media"),
-            CreateDevice("dev_lamp_media", "Floor Lamp", DeviceCategory.Light, "room_media"),
-            CreateDevice("dev_speaker", "Smart Speaker", DeviceCategory.Speaker, "room_media"),
-            CreateDevice("dev_blinds_media", "Smart Blinds", DeviceCategory.Switch, "room_media"),
+            // Bedroom 1
+            CreateDevice("dev_light_b1", "Bedroom Light", DeviceCategory.Light, "room_bed1"),
+            CreateDevice("dev_ac_b1", "Air Conditioner", DeviceCategory.Thermostat, "room_bed1"),
+            CreateDevice("dev_blinds_b1", "Smart Blinds", DeviceCategory.Switch, "room_bed1"),
 
-            // Deck
-            CreateDevice("dev_cam_deck", "Deck Camera", DeviceCategory.Camera, "room_deck"),
+            // Living room
+            CreateDevice("dev_light_lr", "Living Light", DeviceCategory.Light, "room_living"),
+            CreateDevice("dev_tv", "Smart TV", DeviceCategory.Television, "room_living"),
+            CreateDevice("dev_speaker", "Smart Speaker", DeviceCategory.Speaker, "room_living"),
+            CreateDevice("dev_hub", "SmartThings Hub", DeviceCategory.Hub, "room_living"),
 
             // Kitchen
             CreateDevice("dev_light_kit", "Kitchen Light", DeviceCategory.Light, "room_kitchen"),
             CreateDevice("dev_fridge", "Smart Fridge", DeviceCategory.Appliance, "room_kitchen"),
             CreateDevice("dev_cam_kit", "Kitchen Camera", DeviceCategory.Camera, "room_kitchen"),
 
-            // Primary suite
-            CreateDevice("dev_light_ps", "Bedroom Light", DeviceCategory.Light, "room_primary"),
-            CreateDevice("dev_ac", "Air Conditioner", DeviceCategory.Thermostat, "room_primary"),
-            CreateDevice("dev_blinds_ps", "Smart Blinds", DeviceCategory.Switch, "room_primary"),
+            // Bedroom 2
+            CreateDevice("dev_light_b2", "Bedroom Light", DeviceCategory.Light, "room_bed2"),
+            CreateDevice("dev_cam_b2", "Camera", DeviceCategory.Camera, "room_bed2"),
 
-            // Living room
-            CreateDevice("dev_light_lr", "Living Light", DeviceCategory.Light, "room_living"),
-            CreateDevice("dev_speaker_lr", "Speaker", DeviceCategory.Speaker, "room_living"),
-            CreateDevice("dev_cam_lr", "Living Camera", DeviceCategory.Camera, "room_living"),
-            CreateDevice("dev_hub", "SmartThings Hub", DeviceCategory.Hub, "room_living"),
+            // Bedroom 3
+            CreateDevice("dev_light_b3", "Bedroom Light", DeviceCategory.Light, "room_bed3"),
+            CreateDevice("dev_blinds_b3", "Blinds", DeviceCategory.Switch, "room_bed3"),
 
-            // Bedroom
-            CreateDevice("dev_light_bed", "Bedroom Light", DeviceCategory.Light, "room_bedroom"),
-            CreateDevice("dev_cam_bed", "Camera", DeviceCategory.Camera, "room_bedroom"),
-            CreateDevice("dev_blinds_bed", "Blinds", DeviceCategory.Switch, "room_bedroom"),
+            // Balcony 1
+            CreateDevice("dev_cam_bal1", "Balcony Camera", DeviceCategory.Camera, "room_balcony1"),
+            CreateDevice("dev_sensor_bal1", "Motion Sensor", DeviceCategory.Sensor, "room_balcony1"),
 
-            // Porch
-            CreateDevice("dev_sensor_porch", "Motion Sensor", DeviceCategory.Sensor, "room_porch"),
-            CreateDevice("dev_cam_porch", "Porch Camera", DeviceCategory.Camera, "room_porch"),
-
-            // Dining room
-            CreateDevice("dev_light_din", "Dining Light", DeviceCategory.Light, "room_dining"),
-            CreateDevice("dev_cam_din", "Camera", DeviceCategory.Camera, "room_dining"),
-
-            // Laundry
-            CreateDevice("dev_washer", "Smart Washer", DeviceCategory.Appliance, "room_laundry"),
-            CreateDevice("dev_thermo", "Thermostat", DeviceCategory.Thermostat, "room_laundry"),
-
-            // Bathroom
-            CreateDevice("dev_light_bath", "Bath Light", DeviceCategory.Light, "room_bathroom"),
-            CreateDevice("dev_leak", "Leak Sensor", DeviceCategory.Sensor, "room_bathroom"),
+            // Balcony 2
+            CreateDevice("dev_light_bal2", "Balcony Light", DeviceCategory.Light, "room_balcony2"),
         };
     }
 
@@ -230,51 +182,36 @@ public static class MockHomeProvider
     {
         return new List<DevicePlacement>
         {
-            // Media room (0-4, 0-5)
-            new("dev_tv", "room_media", new Vector3(1.5f, 0, 1)),
-            new("dev_lamp_media", "room_media", new Vector3(3.2f, 0, 1)),
-            new("dev_speaker", "room_media", new Vector3(1, 0, 3)),
-            new("dev_blinds_media", "room_media", new Vector3(1, 0, 4.2f)),
+            // Bedroom 1 (0-4, 0-4)
+            new("dev_light_b1", "room_bed1", new Vector3(2, 0, 2)),
+            new("dev_ac_b1", "room_bed1", new Vector3(1, 0, 0.5f)),
+            new("dev_blinds_b1", "room_bed1", new Vector3(3.2f, 0, 3)),
 
-            // Deck (4-7, 0-3)
-            new("dev_cam_deck", "room_deck", new Vector3(5.8f, 0, 1.5f)),
+            // Living room (4-8, 0-4)
+            new("dev_light_lr", "room_living", new Vector3(6, 0, 2)),
+            new("dev_tv", "room_living", new Vector3(5, 0, 0.8f)),
+            new("dev_speaker", "room_living", new Vector3(7, 0, 1)),
+            new("dev_hub", "room_living", new Vector3(6, 0, 3.2f)),
 
-            // Kitchen (7-10, 0-5)
-            new("dev_light_kit", "room_kitchen", new Vector3(8.5f, 0, 1)),
-            new("dev_fridge", "room_kitchen", new Vector3(9, 0, 3)),
-            new("dev_cam_kit", "room_kitchen", new Vector3(8, 0, 2.5f)),
+            // Kitchen (8-12, 0-4)
+            new("dev_light_kit", "room_kitchen", new Vector3(10, 0, 2)),
+            new("dev_fridge", "room_kitchen", new Vector3(11, 0, 1)),
+            new("dev_cam_kit", "room_kitchen", new Vector3(9, 0, 3)),
 
-            // Primary suite (10-14, 0-5)
-            new("dev_light_ps", "room_primary", new Vector3(12, 0, 2.5f)),
-            new("dev_ac", "room_primary", new Vector3(11, 0, 1)),
-            new("dev_blinds_ps", "room_primary", new Vector3(13.2f, 0, 4)),
+            // Bedroom 2 (0-4, 4-8)
+            new("dev_light_b2", "room_bed2", new Vector3(2, 0, 6)),
+            new("dev_cam_b2", "room_bed2", new Vector3(1, 0, 5)),
 
-            // Living room (4-10, 3-7)
-            new("dev_light_lr", "room_living", new Vector3(6, 0, 5.5f)),
-            new("dev_speaker_lr", "room_living", new Vector3(5, 0, 4)),
-            new("dev_cam_lr", "room_living", new Vector3(8, 0, 4)),
-            new("dev_hub", "room_living", new Vector3(7, 0, 6)),
+            // Bedroom 3 (4-8, 4-8)
+            new("dev_light_b3", "room_bed3", new Vector3(6, 0, 6)),
+            new("dev_blinds_b3", "room_bed3", new Vector3(7, 0, 7)),
 
-            // Bedroom (0-4, 5-10)
-            new("dev_light_bed", "room_bedroom", new Vector3(2, 0, 7)),
-            new("dev_cam_bed", "room_bedroom", new Vector3(1, 0, 6)),
-            new("dev_blinds_bed", "room_bedroom", new Vector3(2.5f, 0, 9)),
+            // Balcony 1 (8-12, 4-8)
+            new("dev_cam_bal1", "room_balcony1", new Vector3(10, 0, 6)),
+            new("dev_sensor_bal1", "room_balcony1", new Vector3(11, 0, 7)),
 
-            // Porch (4-7, 7-10)
-            new("dev_sensor_porch", "room_porch", new Vector3(5.5f, 0, 8)),
-            new("dev_cam_porch", "room_porch", new Vector3(5.5f, 0, 9.3f)),
-
-            // Dining room (7-11, 5-10)
-            new("dev_light_din", "room_dining", new Vector3(9, 0, 7.5f)),
-            new("dev_cam_din", "room_dining", new Vector3(8, 0, 6.5f)),
-
-            // Laundry (11-14, 5-7.5)
-            new("dev_washer", "room_laundry", new Vector3(12.5f, 0, 6)),
-            new("dev_thermo", "room_laundry", new Vector3(13, 0, 7)),
-
-            // Bathroom (11-14, 7.5-10)
-            new("dev_light_bath", "room_bathroom", new Vector3(12.5f, 0, 8.5f)),
-            new("dev_leak", "room_bathroom", new Vector3(13, 0, 9.3f)),
+            // Balcony 2 (8-12, 8-10)
+            new("dev_light_bal2", "room_balcony2", new Vector3(10, 0, 9)),
         };
     }
 
