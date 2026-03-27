@@ -1,0 +1,15 @@
+{
+  "name": "godot-migration-notifier",
+  "version": "1.0.0",
+  "description": "WhatsApp notifications for Unity→Godot migration phase updates",
+  "main": "send-phase-update.js",
+  "scripts": {
+    "setup": "node setup.js",
+    "notify": "node send-phase-update.js",
+    "test": "node send-phase-update.js test test 'Test notification from migration notifier'"
+  },
+  "dependencies": {
+    "whatsapp-web.js": "^1.26.0",
+    "qrcode-terminal": "^0.12.0"
+  }
+}

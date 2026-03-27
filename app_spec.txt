@@ -1,0 +1,233 @@
+================================================================================
+APPLICATION SPECIFICATION — Unity to Godot Migration
+Samsung SmartThings IoT 3D Applications
+================================================================================
+
+1. PROJECT IDENTITY
+================================================================================
+Name:           godot-smartthings-migration
+Repository:     https://github.com/sayonsom/unity-godot-migration
+Owner:          Sayon (phoenixunity2026@gmail.com)
+License:        Proprietary (Samsung Electronics)
+Start Date:     March 2026
+Est. Duration:  26 weeks (6 phases)
+
+
+2. PROBLEM STATEMENT
+================================================================================
+Samsung has C# applications that depend on Unity Engine for:
+  - 3D rendering of IoT device visualizations (smart home devices)
+  - Custom shaders (HLSL) for device state visualization and energy monitoring
+  - Accessibility features (push-to-talk voice commands, screen readers)
+  - Networking (MQTT for IoT, SmartThings Cloud API)
+  - UI/HUD overlays for device control
+
+Unity licensing costs and restrictions make it desirable to migrate to Godot
+Engine, which is MIT-licensed, has C# support via .NET 8, and is capable of
+the same 3D rendering workloads.
+
+
+3. SOLUTION ARCHITECTURE
+================================================================================
+
+3.1 Layer Diagram
+-----------------
+┌──────────────────────────────────────────────────────────────┐
+│                Samsung SmartThings App Layer                  │
+│  (Device management, room visualization, automation rules)   │
+├──────────────────────────────────────────────────────────────┤
+│             IEngineAbstraction Interfaces                     │
+│  IRenderService │ IInputService │ IAudioService               │
+│  IAccessibilityService │ INetworkService │ ISceneService      │
+├──────────────────────────────────────────────────────────────┤
+│              Godot Backend Implementation                     │
+│  GodotRenderService │ GodotAccessibilityService │ ...        │
+├──────────────────────────────────────────────────────────────┤
+│              Godot Engine 4.5+ (forked)                      │
+│  Forward+ │ Mobile │ Compatibility renderers                  │
+│  AccessKit │ GDShader │ SceneTree │ MultiplayerAPI            │
+└──────────────────────────────────────────────────────────────┘
+
+3.2 Key Design Decisions
+------------------------
+- Abstraction-first: App layer NEVER imports Godot namespace directly
+- DI via Microsoft.Extensions.DependencyInjection
+- Fork strategy: thin fork, features via GDExtension + NuGet, not engine patches
+- Shader rewrite: manual HLSL → GDShader (no automated tooling exists)
+- Push-to-talk: custom build (mic → VAD → STT → intent → device command)
+
+
+4. FEATURE REQUIREMENTS BY PHASE
+================================================================================
+
+PHASE 0: Unity Dependency Audit (2 weeks)
+------------------------------------------
+INPUT:   Existing Unity C# project source code
+OUTPUT:  Unity Dependency Matrix (JSON + spreadsheet)
+TASKS:
+  [ ] Run unity-dependency-audit.py on Unity project
+  [ ] Classify all dependencies: Core Engine, Plugins, Platform SDK, Pure C#
+  [ ] Catalog all .shader/.shadergraph/.hlsl/.compute files
+  [ ] Document all MonoBehaviour/ScriptableObject usages
+  [ ] Map all #if UNITY_* platform conditionals
+  [ ] Identify blockers and HIGH-risk dependencies
+  [ ] Produce dependency matrix spreadsheet
+DONE-WHEN: JSON audit report + reviewed spreadsheet delivered
+
+PHASE 1: Godot Fork + Abstraction Layer (3 weeks)
+---------------------------------------------------
+INPUT:   Godot 4.5 stable source, Phase 0 audit results
+OUTPUT:  godot-smartthings fork + SmartThings.Abstraction library
+TASKS:
+  [ ] Fork Godot 4.5 stable → godot-smartthings
+  [ ] Build Godot with .NET support on Linux + Windows + Android
+  [ ] Set up CI/CD for Godot builds (GitHub Actions)
+  [ ] Implement all 6 IEngineAbstraction interfaces (scaffolding provided)
+  [ ] Implement GodotRenderService (scaffolding provided)
+  [ ] Implement GodotAccessibilityService (scaffolding provided)
+  [ ] Wire ServiceRegistration.cs with DI container
+  [ ] Set up .NET solution with all 3 projects
+  [ ] Add NuGet packages: MQTTnet, DI, OnnxRuntime
+  [ ] Verify dotnet build passes
+DONE-WHEN: `dotnet build` succeeds, Godot editor launches with C# support
+
+PHASE 2: Vertical Slice Migration (4 weeks)
+---------------------------------------------
+INPUT:   One Unity scene (simplest: device thermostat visualization)
+OUTPUT:  Same scene running in Godot with feature parity
+TASKS:
+  [ ] Select vertical slice scene from Unity project
+  [ ] Convert FBX assets → glTF 2.0 (FBX2glTF or Blender)
+  [ ] Test Unidot Importer for .unitypackage → .tscn
+  [ ] Migrate C# scripts: MonoBehaviour → partial class : Node
+  [ ] Recreate materials: Unity Standard → Godot StandardMaterial3D
+  [ ] Port UI overlay: UGUI → Godot Control nodes
+  [ ] Wire network calls through INetworkService
+  [ ] Side-by-side visual comparison (Unity vs Godot)
+  [ ] Performance benchmark on Galaxy S24 (Android)
+  [ ] Memory leak audit (Dispose all Godot wrappers)
+DONE-WHEN: Scene matches Unity original visually + functionally
+
+PHASE 3: Shader & Rendering Migration (6 weeks)
+-------------------------------------------------
+INPUT:   All Unity shaders from Phase 0 audit
+OUTPUT:  GDShader equivalents for all shaders
+TASKS:
+  [ ] Rewrite each HLSL shader as GDShader (manual, using cheatsheet)
+  [ ] Port surface/fragment shaders (device state visualization)
+  [ ] Port vertex shaders (animation, displacement)
+  [ ] Port post-processing: Unity Volume → Godot CompositorEffect
+  [ ] Port compute shaders via RenderingDevice API
+  [ ] Build shader variants per renderer (Forward+, Mobile, Compatibility)
+  [ ] Create reusable ShaderMaterial library for IoT visuals
+  [ ] Test device_state_glow.gdshader and energy_flow.gdshader
+  [ ] Visual regression testing against Unity renders
+DONE-WHEN: All shaders ported, visual parity confirmed
+
+PHASE 4: Accessibility + IoT Feature Build (6 weeks)
+------------------------------------------------------
+INPUT:   Phase 1 abstraction layer, platform SDKs
+OUTPUT:  Push-to-talk system, screen reader support, IoT protocol layer
+TASKS:
+  Push-to-Talk:
+  [ ] Implement mic capture: AudioEffectCapture or GDExtension
+  [ ] Integrate VAD (Silero VAD via ONNX Runtime C#)
+  [ ] Platform STT: Android SpeechRecognizer, Web SpeechRecognition
+  [ ] Intent parser: voice text → SmartThings DeviceCommand
+  [ ] Wire into IAccessibilityService.RegisterVoiceCommandProcessor()
+
+  Screen Reader:
+  [ ] Enable AccessKit (Godot 4.5) for all Control UI
+  [ ] Label all interactive 3D elements with accessibility names
+  [ ] Test Android TalkBack integration
+  [ ] Test web ARIA (if/when C# web export available)
+
+  IoT Protocols:
+  [ ] MQTT client via MQTTnet NuGet
+  [ ] SmartThings Cloud API (HTTP, already works)
+  [ ] Matter protocol evaluation (GDExtension if native)
+  [ ] CoAP client if needed
+DONE-WHEN: Push-to-talk works on Android, screen reader announces devices
+
+PHASE 5: Full Migration + Platform Export (5 weeks)
+-----------------------------------------------------
+INPUT:   All Unity scenes, all phases complete
+OUTPUT:  Production builds for Windows, Android. Web strategy decided.
+TASKS:
+  [ ] Migrate all remaining Unity scenes using Phase 2 patterns
+  [ ] Build automated regression test suite (GDTest + Chickensoft)
+  [ ] Windows export: .NET + Vulkan Forward+
+  [ ] Android export: Galaxy Store packaging, Knox API via JNI
+  [ ] Web export decision: (A) wait for 4.6, (B) GDScript web, (C) hybrid
+  [ ] Samsung-specific: Galaxy Store submission, Samsung IAP SDK
+  [ ] Knox SDK GDExtension wrapper (if applicable)
+  [ ] SmartThings hub local API testing from Android build
+  [ ] Performance optimization pass across all platforms
+  [ ] Final QA and sign-off
+DONE-WHEN: Production builds for Windows + Android submitted
+
+
+5. TECHNOLOGY STACK
+================================================================================
+Engine:         Godot 4.5 stable (forked as godot-smartthings)
+Language:       C# / .NET 8
+Build System:   SCons (Godot engine), dotnet CLI (.NET projects)
+DI:             Microsoft.Extensions.DependencyInjection
+IoT:            MQTTnet (NuGet), SmartThings Cloud API (HTTP)
+Voice/AI:       Microsoft.ML.OnnxRuntime (Silero VAD), platform STT
+Accessibility:  AccessKit (Godot 4.5 built-in)
+Testing:        GDTest, Chickensoft test packages, xUnit
+Notifications:  whatsapp-web.js (phase completion to Unity2Godot group)
+CI/CD:          GitHub Actions
+Version Control: Git, GitHub (sayonsom/unity-godot-migration)
+
+
+6. TARGET PLATFORMS
+================================================================================
+Platform        Renderer            Status          Notes
+--------        --------            ------          -----
+Windows         Vulkan Forward+     SUPPORTED       Primary dev platform
+Android         Mobile renderer     SUPPORTED       Galaxy S24+ target
+Web (WASM)      Compatibility       BLOCKED         No C# web export in 4.5
+
+
+7. WHATSAPP NOTIFICATION SYSTEM
+================================================================================
+Library:    whatsapp-web.js
+Group:      "Unity2Godot"
+Purpose:    Automated phase start/completion notifications
+
+Message format:
+  🔔 *Unity→Godot Migration Update*
+  Phase {N}: {phase_name}
+  Status: {started|completed|blocked}
+  Details: {description}
+  Timestamp: {ISO datetime}
+
+Setup: cd notifier && node setup.js (scan QR once)
+Usage: node send-phase-update.js <phase> <status> "<message>"
+
+
+8. ACCEPTANCE CRITERIA
+================================================================================
+- All 6 interfaces implemented with Godot backend
+- All Unity shaders rewritten as GDShader
+- Push-to-talk working on Android
+- Screen reader support via AccessKit
+- MQTT IoT device communication working
+- Windows and Android production builds
+- Web strategy documented (even if deferred)
+- Performance parity with Unity on Galaxy S24
+- Zero Godot object memory leaks (Dispose audit)
+- All phases notified via WhatsApp
+- All code on GitHub with CI/CD
+
+
+9. CONSTRAINTS
+================================================================================
+- Must use C# (not GDScript) for all business logic
+- Must maintain engine-agnostic abstraction layer
+- Cannot diverge from Godot upstream on core renderer
+- Must use GDExtension + NuGet for custom features
+- C# web export is not available — plan accordingly
+- Samsung proprietary SDKs may have platform restrictions

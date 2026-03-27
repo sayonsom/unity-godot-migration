@@ -1,0 +1,69 @@
+# =============================================================================
+# .gitignore — Unity to Godot Migration
+# =============================================================================
+
+# --- .NET ---
+bin/
+obj/
+*.user
+*.suo
+*.csproj.user
+*.nupkg
+*.snupkg
+project.lock.json
+.vs/
+
+# --- Godot Engine (built from source) ---
+godot-smartthings/
+*.os
+*.pyc
+__pycache__/
+
+# --- Godot Project ---
+.godot/
+*.import
+export_presets.cfg
+
+# --- WhatsApp Notifier ---
+notifier/.wwebjs_auth/
+notifier/.wwebjs_cache/
+notifier/node_modules/
+notifier/.group-config.json
+notifier/notification-log.json
+
+# --- Node ---
+node_modules/
+package-lock.json
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# --- IDE ---
+.idea/
+.vscode/
+*.code-workspace
+
+# --- Build artifacts ---
+*.exe
+*.dll
+*.so
+*.dylib
+/tmp/
+*.log
+
+# --- Android ---
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+
+# --- Audit outputs ---
+*-dependency-audit.json
+
+# --- Environment ---
+.env
+.env.local
