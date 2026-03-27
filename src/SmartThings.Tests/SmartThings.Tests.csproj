@@ -26,6 +26,12 @@
     <ProjectReference Include="..\SmartThings.Abstraction\SmartThings.Abstraction.csproj" />
   </ItemGroup>
 
+  <!-- Include Godot Data classes directly (no Godot SDK dependency) -->
+  <ItemGroup>
+    <Compile Include="..\SmartThings.Godot\Data\MockDeviceProvider.cs" Link="GodotData\MockDeviceProvider.cs" />
+    <Compile Include="..\SmartThings.Godot\Data\DeviceVisualizationManager.cs" Link="GodotData\DeviceVisualizationManager.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Moq" Version="4.20.*" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="8.*" />
