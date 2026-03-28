@@ -9,6 +9,7 @@ using SmartThings.Abstraction.Models;
 using SmartThings.Godot.Data;
 using SmartThings.Godot.Scripts.Accessibility;
 using SmartThings.Godot.Scripts.IoT;
+using SmartThings.Godot.Scripts.Performance;
 using SmartThings.Godot.Scripts.Voice;
 using SmartThings.Godot.Services;
 
@@ -35,6 +36,8 @@ public partial class HomeMapSceneController : GodotNative.Node3D
     private AccessibleDeviceAnnouncer? _deviceAnnouncer;
     private AccessibilityTestPanel? _a11yTestPanel;
     private SmartThingsEventBus? _eventBus;
+    private DeviceDetailModal? _deviceModal;
+    private AndroidProfiler? _profiler;
 
     // Services (would come from DI in production)
     private GodotAccessibilityService? _a11yService;
@@ -72,7 +75,50 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         // Register rooms and devices for accessibility after they're built
         RegisterAccessibleElements();
 
-        GodotNative.GD.Print("[HomeMapScene] Loaded with Phase 4: accessibility, voice, and IoT.");
+        // Phase 5: Device detail modal + performance profiler
+        InitializeDeviceModal();
+        InitializeProfiler();
+
+        GodotNative.GD.Print("[HomeMapScene] Loaded with Phase 5: device controls, profiler, CI/CD.");
+    }
+
+    // ── Phase 5: Device Detail Modal ──────────────────────────────────────────
+
+    private void InitializeDeviceModal()
+    {
+        _deviceModal = new DeviceDetailModal();
+        var uiLayerModal = GetNode<GodotNative.CanvasLayer>("UIOverlay");
+        uiLayerModal.AddChild(_deviceModal);
+
+        // Wire device pin taps to open the modal
+        _pinManager!.DevicePinTapped += OnDevicePinTapped;
+
+        // Wire modal commands to event bus
+        _deviceModal.DeviceCommandIssued += (deviceId, capability, command) =>
+        {
+            GodotNative.GD.Print($"[Device] Command: {deviceId} → {capability}.{command}");
+            _eventBus?.SimulateDeviceEvent(deviceId, capability, command);
+            _a11yService?.Announce($"{command} sent", AnnouncePriority.Normal);
+        };
+    }
+
+    private void OnDevicePinTapped(string deviceId)
+    {
+        var device = _home?.Devices.Find(d => d.DeviceId == deviceId);
+        if (device != null && _home != null)
+        {
+            _deviceModal?.ShowDevice(device, _home);
+            _a11yService?.Announce($"{device.Label}. {device.Category}. Tap controls to operate.", AnnouncePriority.Normal);
+        }
+    }
+
+    // ── Phase 5: Performance Profiler ─────────────────────────────────────────
+
+    private void InitializeProfiler()
+    {
+        _profiler = new AndroidProfiler();
+        var uiLayerPerf = GetNode<GodotNative.CanvasLayer>("UIOverlay");
+        uiLayerPerf.AddChild(_profiler);
     }
 
     // ── Phase 4: Accessibility ──────────────────────────────────────────────

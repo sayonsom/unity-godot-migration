@@ -38,10 +38,7 @@ public partial class HomeMapAssembler : GodotNative.Node3D
             _camera.ScreenTapped += OnScreenTapped;
         }
 
-        if (_pinManager != null)
-        {
-            _pinManager.DevicePinTapped += OnDevicePinTapped;
-        }
+        // DevicePinTapped is now handled by HomeMapSceneController → DeviceDetailModal
 
         GodotNative.GD.Print("[HomeMapAssembler] Ready.");
     }
