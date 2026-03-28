@@ -1,6 +1,6 @@
 // =============================================================================
-// AccessibilityTestPanel.cs — On-screen panel to manually test all a11y features
-// Visible buttons for: navigate rooms, announce, toggle TalkBack mode, test PTT
+// AccessibilityTestPanel.cs — On-screen panel to test a11y on real devices
+// Bottom-right floating panel with large touch targets (48dp+)
 // =============================================================================
 
 using GodotNative = Godot;
@@ -10,16 +10,10 @@ using SmartThings.Abstraction.Models;
 namespace SmartThings.Godot.Scripts.Accessibility;
 
 /// <summary>
-/// Debug/test panel for accessibility features.
-/// Shows a collapsible sidebar with buttons to:
-///   - Navigate between rooms/devices (Next/Prev/Activate)
-///   - Test TTS announcements
-///   - Simulate device state changes
-///   - Test voice commands without mic
-///   - Show current focus info
-///
-/// This panel is essential for testing on a real phone where
-/// TalkBack gestures may not map 1:1 to our custom 3D navigation.
+/// Mobile-friendly test panel for accessibility features.
+/// Positioned bottom-right with a toggle FAB button.
+/// All buttons are 52px+ tall for easy phone touch targets.
+/// Panel scrolls to fit all content on small screens.
 /// </summary>
 public partial class AccessibilityTestPanel : GodotNative.Control
 {
@@ -31,7 +25,8 @@ public partial class AccessibilityTestPanel : GodotNative.Control
     private GodotNative.Label? _focusInfoLabel;
     private GodotNative.Label? _statusLabel;
     private GodotNative.Panel? _panel;
-    private bool _isExpanded = true;
+    private GodotNative.Button? _toggleFab;
+    private bool _isExpanded;
 
     // Voice command test cycling
     private int _voiceTestIndex;
@@ -83,6 +78,7 @@ public partial class AccessibilityTestPanel : GodotNative.Control
     {
         MouseFilter = MouseFilterEnum.Ignore;
         AnchorsPreset = (int)LayoutPreset.FullRect;
+        BuildToggleFab();
         BuildPanel();
     }
 
@@ -98,81 +94,155 @@ public partial class AccessibilityTestPanel : GodotNative.Control
             _statusLabel.Text = text;
     }
 
+    // ── Toggle FAB (always visible, bottom-right) ────────────────────────────
+
+    private void BuildToggleFab()
+    {
+        _toggleFab = new GodotNative.Button();
+        _toggleFab.Text = "A11Y";
+        _toggleFab.MouseFilter = MouseFilterEnum.Stop;
+        _toggleFab.CustomMinimumSize = new GodotNative.Vector2(64, 64);
+
+        // Bottom-right anchors with safe margin from edges
+        _toggleFab.AnchorLeft = 1.0f;
+        _toggleFab.AnchorTop = 1.0f;
+        _toggleFab.AnchorRight = 1.0f;
+        _toggleFab.AnchorBottom = 1.0f;
+        _toggleFab.OffsetLeft = -80;
+        _toggleFab.OffsetTop = -148;  // above bottom bar area
+        _toggleFab.OffsetRight = -12;
+        _toggleFab.OffsetBottom = -80;
+
+        _toggleFab.AddThemeFontSizeOverride("font_size", 16);
+
+        var fabStyle = new GodotNative.StyleBoxFlat();
+        fabStyle.BgColor = new GodotNative.Color(0.15f, 0.45f, 0.85f, 0.95f);
+        fabStyle.CornerRadiusTopLeft = 16;
+        fabStyle.CornerRadiusTopRight = 16;
+        fabStyle.CornerRadiusBottomLeft = 16;
+        fabStyle.CornerRadiusBottomRight = 16;
+        _toggleFab.AddThemeStyleboxOverride("normal", fabStyle);
+
+        var fabHover = new GodotNative.StyleBoxFlat();
+        fabHover.BgColor = new GodotNative.Color(0.2f, 0.55f, 0.95f, 0.95f);
+        fabHover.CornerRadiusTopLeft = 16;
+        fabHover.CornerRadiusTopRight = 16;
+        fabHover.CornerRadiusBottomLeft = 16;
+        fabHover.CornerRadiusBottomRight = 16;
+        _toggleFab.AddThemeStyleboxOverride("hover", fabHover);
+        _toggleFab.AddThemeStyleboxOverride("pressed", fabHover);
+
+        _toggleFab.Pressed += () =>
+        {
+            _isExpanded = !_isExpanded;
+            if (_panel != null) _panel.Visible = _isExpanded;
+            if (_toggleFab != null) _toggleFab.Text = _isExpanded ? "X" : "A11Y";
+        };
+
+        AddChild(_toggleFab);
+    }
+
+    // ── Main panel (shown/hidden by FAB) ─────────────────────────────────────
+
     private void BuildPanel()
     {
-        // Collapsible panel on the left side
         _panel = new GodotNative.Panel();
-        _panel.AnchorsPreset = (int)LayoutPreset.LeftWide;
-        _panel.OffsetRight = 200;
-        _panel.OffsetTop = 65;  // Below top bar
-        _panel.OffsetBottom = -60; // Above bottom bar
+        _panel.Visible = false; // starts hidden
+
+        // Right side, from below safe area to above bottom bar
+        // Width = 260px, right-aligned with 8px margin
+        _panel.AnchorLeft = 1.0f;
+        _panel.AnchorTop = 0.0f;
+        _panel.AnchorRight = 1.0f;
+        _panel.AnchorBottom = 1.0f;
+        _panel.OffsetLeft = -268;
+        _panel.OffsetTop = 48;     // below status bar / notch safe area
+        _panel.OffsetRight = -8;
+        _panel.OffsetBottom = -64; // above bottom nav area
         _panel.MouseFilter = MouseFilterEnum.Stop;
         AddChild(_panel);
 
         var panelStyle = new GodotNative.StyleBoxFlat();
-        panelStyle.BgColor = new GodotNative.Color(0.08f, 0.08f, 0.12f, 0.92f);
-        panelStyle.ContentMarginLeft = 8;
-        panelStyle.ContentMarginRight = 8;
-        panelStyle.ContentMarginTop = 8;
-        panelStyle.ContentMarginBottom = 8;
+        panelStyle.BgColor = new GodotNative.Color(0.06f, 0.06f, 0.1f, 0.95f);
+        panelStyle.CornerRadiusTopLeft = 12;
+        panelStyle.CornerRadiusTopRight = 12;
+        panelStyle.CornerRadiusBottomLeft = 12;
+        panelStyle.CornerRadiusBottomRight = 12;
+        panelStyle.ContentMarginLeft = 10;
+        panelStyle.ContentMarginRight = 10;
+        panelStyle.ContentMarginTop = 10;
+        panelStyle.ContentMarginBottom = 10;
         _panel.AddThemeStyleboxOverride("panel", panelStyle);
 
         var scrollContainer = new GodotNative.ScrollContainer();
         scrollContainer.AnchorsPreset = (int)LayoutPreset.FullRect;
-        scrollContainer.OffsetLeft = 4;
-        scrollContainer.OffsetTop = 4;
-        scrollContainer.OffsetRight = -4;
-        scrollContainer.OffsetBottom = -4;
+        scrollContainer.OffsetLeft = 6;
+        scrollContainer.OffsetTop = 6;
+        scrollContainer.OffsetRight = -6;
+        scrollContainer.OffsetBottom = -6;
+        scrollContainer.HorizontalScrollMode = GodotNative.ScrollContainer.ScrollMode.Disabled;
         _panel.AddChild(scrollContainer);
 
         _buttonContainer = new GodotNative.VBoxContainer();
         _buttonContainer.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        _buttonContainer.AddThemeConstantOverride("separation", 6);
         scrollContainer.AddChild(_buttonContainer);
 
-        // Title
-        AddLabel("-- A11Y TEST --", 14, new GodotNative.Color(1f, 0.8f, 0.2f));
+        // ── Title ──
+        AddLabel("ACCESSIBILITY TEST", 16, new GodotNative.Color(1f, 0.85f, 0.3f));
 
-        // Focus info display
+        // ── Focus info ──
         _focusInfoLabel = new GodotNative.Label();
         _focusInfoLabel.Text = "Focus: none";
-        _focusInfoLabel.AddThemeFontSizeOverride("font_size", 12);
-        _focusInfoLabel.AddThemeColorOverride("font_color", new GodotNative.Color(0.8f, 0.9f, 1f));
+        _focusInfoLabel.AddThemeFontSizeOverride("font_size", 15);
+        _focusInfoLabel.AddThemeColorOverride("font_color", new GodotNative.Color(0.85f, 0.92f, 1f));
         _focusInfoLabel.AutowrapMode = GodotNative.TextServer.AutowrapMode.WordSmart;
         _buttonContainer.AddChild(_focusInfoLabel);
 
-        // Status label
+        // ── Status ──
         _statusLabel = new GodotNative.Label();
-        _statusLabel.Text = "";
-        _statusLabel.AddThemeFontSizeOverride("font_size", 11);
+        _statusLabel.Text = "Tap A11Y to open";
+        _statusLabel.AddThemeFontSizeOverride("font_size", 14);
         _statusLabel.AddThemeColorOverride("font_color", new GodotNative.Color(0.5f, 1f, 0.5f));
         _statusLabel.AutowrapMode = GodotNative.TextServer.AutowrapMode.WordSmart;
         _buttonContainer.AddChild(_statusLabel);
 
         AddSeparator();
-        AddLabel("Navigation", 13, new GodotNative.Color(0.7f, 0.8f, 1f));
+        AddLabel("Navigate", 15, new GodotNative.Color(0.7f, 0.85f, 1f));
 
-        // Navigation buttons
-        AddButton("< Prev", () =>
+        // Navigation row — Prev / Next side by side
+        var navRow = new GodotNative.HBoxContainer();
+        navRow.AddThemeConstantOverride("separation", 8);
+        _buttonContainer.AddChild(navRow);
+
+        var prevBtn = MakeButton("< Prev", new GodotNative.Color(0.3f, 0.3f, 0.5f));
+        prevBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        prevBtn.Pressed += () =>
         {
             _a11yManager?.FocusPrevious();
-            SetStatus("Moved to previous element");
-        });
-        AddButton("Next >", () =>
+            SetStatus("Previous element");
+        };
+        navRow.AddChild(prevBtn);
+
+        var nextBtn = MakeButton("Next >", new GodotNative.Color(0.3f, 0.3f, 0.5f));
+        nextBtn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        nextBtn.Pressed += () =>
         {
             _a11yManager?.FocusNext();
-            SetStatus("Moved to next element");
-        });
-        AddButton("Activate", () =>
+            SetStatus("Next element");
+        };
+        navRow.AddChild(nextBtn);
+
+        AddActionButton("Activate Focused", new GodotNative.Color(0.2f, 0.5f, 0.3f), () =>
         {
             _a11yManager?.ActivateFocused();
-            SetStatus("Activated focused element");
+            SetStatus("Activated");
         });
 
         AddSeparator();
-        AddLabel("TTS Test", 13, new GodotNative.Color(0.7f, 0.8f, 1f));
+        AddLabel("TTS Speech", 15, new GodotNative.Color(0.7f, 0.85f, 1f));
 
-        // TTS announcement buttons
-        AddButton("Announce Home", () =>
+        AddActionButton("Announce Home", new GodotNative.Color(0.3f, 0.35f, 0.5f), () =>
         {
             if (_home != null)
             {
@@ -182,7 +252,7 @@ public partial class AccessibilityTestPanel : GodotNative.Control
             }
         });
 
-        AddButton("Announce Room", () =>
+        AddActionButton("Announce Room", new GodotNative.Color(0.3f, 0.35f, 0.5f), () =>
         {
             if (_home != null && _home.Rooms.Count > 0)
             {
@@ -194,60 +264,73 @@ public partial class AccessibilityTestPanel : GodotNative.Control
             }
         });
 
-        AddButton("Alert Test", () =>
+        AddActionButton("Alert Test", new GodotNative.Color(0.6f, 0.2f, 0.2f), () =>
         {
             _a11yService?.Announce("Alert! Front door has been unlocked.", AnnouncePriority.Alert);
-            SetStatus("TTS Alert sent");
+            SetStatus("Alert sent!");
         });
 
         AddSeparator();
-        AddLabel("Voice Cmd", 13, new GodotNative.Color(0.7f, 0.8f, 1f));
+        AddLabel("Voice / Events", 15, new GodotNative.Color(0.7f, 0.85f, 1f));
 
-        // Voice command test button (cycles through commands)
-        AddButton("Test Voice Cmd", () =>
+        AddActionButton("Test Voice Cmd", new GodotNative.Color(0.4f, 0.25f, 0.5f), () =>
         {
             var cmd = TestVoiceCommands[_voiceTestIndex % TestVoiceCommands.Length];
             _voiceTestIndex++;
             EmitSignal(SignalName.TestVoiceCommand, cmd);
-            _a11yService?.Announce($"Voice command: {cmd}", AnnouncePriority.Normal);
+            _a11yService?.Announce($"Voice: {cmd}", AnnouncePriority.Normal);
             SetStatus($"Voice: \"{cmd}\"");
         });
 
-        AddSeparator();
-        AddLabel("Device Events", 13, new GodotNative.Color(0.7f, 0.8f, 1f));
-
-        // Simulated device event button
-        AddButton("Simulate Event", () =>
+        AddActionButton("Simulate Event", new GodotNative.Color(0.4f, 0.35f, 0.2f), () =>
         {
             var evt = TestDeviceEvents[_deviceEventIndex % TestDeviceEvents.Length];
             _deviceEventIndex++;
             EmitSignal(SignalName.TestDeviceEvent, evt.deviceId, evt.capability, evt.value);
             var device = _home?.Devices.Find(d => d.DeviceId == evt.deviceId);
-            SetStatus($"Event: {device?.Label ?? evt.deviceId} → {evt.capability}={evt.value}");
-        });
-
-        AddSeparator();
-        AddLabel("Panel", 13, new GodotNative.Color(0.7f, 0.8f, 1f));
-
-        // Toggle panel visibility
-        AddButton("Hide Panel", () =>
-        {
-            _isExpanded = !_isExpanded;
-            if (_panel != null)
-            {
-                _panel.OffsetRight = _isExpanded ? 200 : 50;
-                if (_buttonContainer != null) _buttonContainer.Visible = _isExpanded;
-            }
+            SetStatus($"Event: {device?.Label ?? evt.deviceId} {evt.capability}={evt.value}");
         });
     }
 
-    private void AddButton(string text, Action callback)
+    // ── Button helpers ────────────────────────────────────────────────────────
+
+    private GodotNative.Button MakeButton(string text, GodotNative.Color bgColor)
     {
         var btn = new GodotNative.Button();
         btn.Text = text;
         btn.MouseFilter = MouseFilterEnum.Stop;
-        btn.CustomMinimumSize = new GodotNative.Vector2(0, 36);
-        btn.AddThemeFontSizeOverride("font_size", 13);
+        btn.CustomMinimumSize = new GodotNative.Vector2(0, 52); // 52px = good mobile touch target
+        btn.AddThemeFontSizeOverride("font_size", 16);
+
+        var style = new GodotNative.StyleBoxFlat();
+        style.BgColor = bgColor;
+        style.CornerRadiusTopLeft = 8;
+        style.CornerRadiusTopRight = 8;
+        style.CornerRadiusBottomLeft = 8;
+        style.CornerRadiusBottomRight = 8;
+        style.ContentMarginLeft = 12;
+        style.ContentMarginRight = 12;
+        btn.AddThemeStyleboxOverride("normal", style);
+
+        var pressed = new GodotNative.StyleBoxFlat();
+        pressed.BgColor = new GodotNative.Color(
+            bgColor.R + 0.15f, bgColor.G + 0.15f, bgColor.B + 0.15f, bgColor.A);
+        pressed.CornerRadiusTopLeft = 8;
+        pressed.CornerRadiusTopRight = 8;
+        pressed.CornerRadiusBottomLeft = 8;
+        pressed.CornerRadiusBottomRight = 8;
+        pressed.ContentMarginLeft = 12;
+        pressed.ContentMarginRight = 12;
+        btn.AddThemeStyleboxOverride("hover", pressed);
+        btn.AddThemeStyleboxOverride("pressed", pressed);
+
+        return btn;
+    }
+
+    private void AddActionButton(string text, GodotNative.Color bgColor, Action callback)
+    {
+        var btn = MakeButton(text, bgColor);
+        btn.SizeFlagsHorizontal = SizeFlags.ExpandFill;
         btn.Pressed += callback;
         _buttonContainer?.AddChild(btn);
     }
@@ -265,7 +348,7 @@ public partial class AccessibilityTestPanel : GodotNative.Control
     private void AddSeparator()
     {
         var sep = new GodotNative.HSeparator();
-        sep.CustomMinimumSize = new GodotNative.Vector2(0, 8);
+        sep.CustomMinimumSize = new GodotNative.Vector2(0, 4);
         _buttonContainer?.AddChild(sep);
     }
 }
