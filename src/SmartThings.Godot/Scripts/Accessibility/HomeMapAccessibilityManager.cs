@@ -144,7 +144,7 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         }
     }
 
-    /// <summary>Focus a specific element by its ID.</summary>
+    /// <summary>Focus a specific element by its ID (with TTS announcement).</summary>
     public void FocusElement(string id)
     {
         var idx = _elements.FindIndex(e => e.Id == id);
@@ -152,6 +152,19 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         {
             _focusIndex = idx;
             ApplyFocus();
+        }
+    }
+
+    /// <summary>Move focus ring to element WITHOUT TTS (caller handles announcement).</summary>
+    public void FocusElementSilent(string id)
+    {
+        var idx = _elements.FindIndex(e => e.Id == id);
+        if (idx >= 0)
+        {
+            _focusIndex = idx;
+            var element = _elements[_focusIndex];
+            if (GodotNative.GodotObject.IsInstanceValid(element.Node))
+                ShowFocusRing(element.Node.GlobalPosition);
         }
     }
 

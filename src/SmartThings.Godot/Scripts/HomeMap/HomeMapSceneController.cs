@@ -42,6 +42,9 @@ public partial class HomeMapSceneController : GodotNative.Node3D
 
     private SmartHome? _home;
 
+    // Guard against infinite signal loops (room selected → focus → room focused → select → ...)
+    private bool _isHandlingSelection;
+
     public override void _Ready()
     {
         _assembler = GetNode<HomeMapAssembler>("HomeRoot");
@@ -213,56 +216,92 @@ public partial class HomeMapSceneController : GodotNative.Node3D
             "Check device status"));
     }
 
+    /// <summary>
+    /// Called when user taps a room on the 3D map.
+    /// Single consolidated announcement — no cascading TTS.
+    /// </summary>
     private void OnRoomSelected(string roomId, string roomName)
     {
-        // Show room info in UI
-        _ui?.ShowRoomInfo(roomId, roomName);
+        if (_isHandlingSelection) return; // break infinite loop
+        _isHandlingSelection = true;
 
-        // TTS announcement — speak room name and its devices
-        var room = _home?.Rooms.Find(r => r.RoomId == roomId);
-        if (room != null && _a11yService != null)
+        try
         {
-            var devices = _home?.Devices.Where(d => d.RoomId == roomId).ToList();
-            int count = devices?.Count ?? 0;
+            // Show room info in UI
+            _ui?.ShowRoomInfo(roomId, roomName);
 
-            string announcement = $"{room.Name}. {room.RoomType}.";
-            if (count > 0)
+            // Move focus ring (but suppress its TTS — we'll do our own)
+            _a11yManager?.FocusElementSilent(roomId);
+
+            // Update test panel focus info
+            var room = _home?.Rooms.Find(r => r.RoomId == roomId);
+            if (room != null)
             {
-                var deviceNames = string.Join(", ", devices!.Take(5).Select(d => d.Label));
-                announcement += $" {count} device{(count != 1 ? "s" : "")}: {deviceNames}.";
-            }
-            else
-            {
-                announcement += " No devices.";
+                var idx = _home!.Rooms.IndexOf(room);
+                _a11yTestPanel?.UpdateFocusInfo(room.Name, "Room", idx, _home.Rooms.Count);
             }
 
-            _a11yService.Announce(announcement, AnnouncePriority.Normal);
+            // ONE clean TTS announcement — room name + device summary
+            if (room != null && _a11yService != null)
+            {
+                var devices = _home?.Devices.Where(d => d.RoomId == roomId).ToList();
+                int count = devices?.Count ?? 0;
+
+                string announcement = $"{room.Name}.";
+                if (count > 0)
+                {
+                    var deviceNames = string.Join(", ", devices!.Take(4).Select(d => d.Label));
+                    announcement += $" {count} device{(count != 1 ? "s" : "")}: {deviceNames}.";
+                }
+
+                _a11yService.Announce(announcement, AnnouncePriority.Normal);
+            }
         }
-
-        // Also move the a11y focus ring to this room
-        _a11yManager?.FocusElement(roomId);
+        finally
+        {
+            _isHandlingSelection = false;
+        }
     }
 
+    /// <summary>
+    /// Called from accessibility panel navigation (Prev/Next/Select buttons).
+    /// Updates scene visuals without re-triggering the selection loop.
+    /// </summary>
     private void OnAccessibilityRoomFocused(string roomId)
     {
-        _assembler?.SelectRoom(roomId);
-        var room = _home?.Rooms.Find(r => r.RoomId == roomId);
-        if (room != null)
-        {
-            _ui?.ShowRoomInfo(roomId, room.Name);
+        if (_isHandlingSelection) return; // break infinite loop
+        _isHandlingSelection = true;
 
-            // Announce room details
-            var devices = _home?.Devices.Where(d => d.RoomId == roomId).ToList();
-            if (devices != null)
-                _deviceAnnouncer?.AnnounceRoomSummary(room, devices);
+        try
+        {
+            _assembler?.SelectRoom(roomId);
+            var room = _home?.Rooms.Find(r => r.RoomId == roomId);
+            if (room != null)
+                _ui?.ShowRoomInfo(roomId, room.Name);
+            // TTS already handled by HomeMapAccessibilityManager.ApplyFocus()
+        }
+        finally
+        {
+            _isHandlingSelection = false;
         }
     }
 
     private void OnAccessibilityDeviceFocused(string deviceId)
     {
-        var device = _home?.Devices.Find(d => d.DeviceId == deviceId);
-        if (device != null)
-            _ui?.ShowDevicePopup(device);
+        if (_isHandlingSelection) return;
+        _isHandlingSelection = true;
+
+        try
+        {
+            var device = _home?.Devices.Find(d => d.DeviceId == deviceId);
+            if (device != null)
+                _ui?.ShowDevicePopup(device);
+            // TTS already handled by HomeMapAccessibilityManager.ApplyFocus()
+        }
+        finally
+        {
+            _isHandlingSelection = false;
+        }
     }
 
     // ── Phase 4: Push-to-Talk ───────────────────────────────────────────────
