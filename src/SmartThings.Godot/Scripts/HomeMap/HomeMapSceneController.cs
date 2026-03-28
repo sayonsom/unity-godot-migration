@@ -54,7 +54,7 @@ public partial class HomeMapSceneController : GodotNative.Node3D
 
         // Wire UI signals
         _ui.ResetViewPressed += () => _camera?.ResetView();
-        _assembler.RoomSelected += (roomId, roomName) => _ui.ShowRoomInfo(roomId, roomName);
+        _assembler.RoomSelected += OnRoomSelected;
 
         // Load mock home data
         _home = MockHomeProvider.CreateSampleHome();
@@ -211,6 +211,36 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         vcp.RegisterCommand(new VoiceCommandPattern(
             "status", new[] { "what's the status of {device}", "is {device} on" },
             "Check device status"));
+    }
+
+    private void OnRoomSelected(string roomId, string roomName)
+    {
+        // Show room info in UI
+        _ui?.ShowRoomInfo(roomId, roomName);
+
+        // TTS announcement — speak room name and its devices
+        var room = _home?.Rooms.Find(r => r.RoomId == roomId);
+        if (room != null && _a11yService != null)
+        {
+            var devices = _home?.Devices.Where(d => d.RoomId == roomId).ToList();
+            int count = devices?.Count ?? 0;
+
+            string announcement = $"{room.Name}. {room.RoomType}.";
+            if (count > 0)
+            {
+                var deviceNames = string.Join(", ", devices!.Take(5).Select(d => d.Label));
+                announcement += $" {count} device{(count != 1 ? "s" : "")}: {deviceNames}.";
+            }
+            else
+            {
+                announcement += " No devices.";
+            }
+
+            _a11yService.Announce(announcement, AnnouncePriority.Normal);
+        }
+
+        // Also move the a11y focus ring to this room
+        _a11yManager?.FocusElement(roomId);
     }
 
     private void OnAccessibilityRoomFocused(string roomId)
