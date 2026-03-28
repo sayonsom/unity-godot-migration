@@ -1,0 +1,62 @@
+name: Test (.NET Build & xUnit)
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "*.sln"
+      - ".github/workflows/test-only.yml"
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: "8.0.x"
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('src/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: src
+
+      - name: Build solution
+        run: dotnet build --no-restore --configuration Release
+        working-directory: src
+
+      - name: Run xUnit tests
+        run: |
+          dotnet test SmartThings.Tests/SmartThings.Tests.csproj \
+            --no-build \
+            --configuration Release \
+            --logger "trx;LogFileName=test-results.trx" \
+            --results-directory ./test-results \
+            --verbosity normal
+        working-directory: src
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results
+          path: src/test-results/*.trx
+          retention-days: 14

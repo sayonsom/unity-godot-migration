@@ -35,23 +35,48 @@ public partial class GodotAccessibilityService : GodotNative.Node, IAccessibilit
 
     public event Action<AccessibilityPreferencesChanged>? OnPreferencesChanged;
 
+    // --- TTS state ---
+    private double _lastAnnounceTime;
+    private string _lastAnnounceText = "";
+    private const double AnnounceCooldown = 0.8; // seconds — prevent rapid-fire TTS
+
     // --- Screen Reader ---
 
     public void Announce(string text, AnnouncePriority priority = AnnouncePriority.Normal)
     {
-        // Godot 4.5: Use DisplayServer.tts_speak() for text-to-speech
-        // This bridges to platform TTS (Android TalkBack, Windows Narrator, etc.)
-        var utteranceId = GodotNative.DisplayServer.TtsSpeak(
+        // De-duplicate: skip if same text announced within cooldown
+        double now = GodotNative.Time.GetTicksMsec() / 1000.0;
+        if (text == _lastAnnounceText && (now - _lastAnnounceTime) < AnnounceCooldown)
+        {
+            GodotNative.GD.Print($"[A11y] Skipped (duplicate): {text}");
+            return;
+        }
+
+        // Always stop any ongoing speech first, then speak the new text
+        // This prevents speech from piling up and talking non-stop
+        GodotNative.DisplayServer.TtsStop();
+
+        GodotNative.DisplayServer.TtsSpeak(
             text,
             voice: "",
             volume: 100,
             pitch: 1.0f,
             rate: 1.0f,
             utteranceId: 0,
-            interrupt: priority >= AnnouncePriority.High
+            interrupt: true // always interrupt — we already called TtsStop
         );
 
+        _lastAnnounceText = text;
+        _lastAnnounceTime = now;
+
         GodotNative.GD.Print($"[A11y] Announce ({priority}): {text}");
+    }
+
+    /// <summary>Stop all ongoing TTS speech immediately.</summary>
+    public void StopSpeaking()
+    {
+        GodotNative.DisplayServer.TtsStop();
+        GodotNative.GD.Print("[A11y] TTS stopped");
     }
 
     public void RegisterAccessibleNode(INodeHandle node, AccessibleInfo info)

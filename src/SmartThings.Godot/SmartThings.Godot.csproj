@@ -1,4 +1,4 @@
-<Project Sdk="Godot.NET.Sdk/4.5.0">
+<Project Sdk="Godot.NET.Sdk/4.6.1">
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -20,8 +20,5 @@
     <PackageReference Include="Microsoft.Extensions.Logging" Version="8.*" />
     <PackageReference Include="MQTTnet" Version="4.*" />
     <PackageReference Include="Microsoft.ML.OnnxRuntime" Version="1.*" />
-    <!-- Chickensoft ecosystem for idiomatic Godot C# -->
-    <PackageReference Include="Chickensoft.AutoInject" Version="2.*" />
-    <PackageReference Include="Chickensoft.LogicBlocks" Version="5.*" />
   </ItemGroup>
 </Project>

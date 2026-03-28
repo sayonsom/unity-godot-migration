@@ -22,6 +22,9 @@ public interface IAccessibilityService
     /// <summary>Announce text to the screen reader (e.g., "Smart thermostat set to 72°F").</summary>
     void Announce(string text, AnnouncePriority priority = AnnouncePriority.Normal);
 
+    /// <summary>Stop all ongoing speech immediately.</summary>
+    void StopSpeaking();
+
     /// <summary>Register a 3D node as accessible (gives it a name + role for screen readers).</summary>
     void RegisterAccessibleNode(INodeHandle node, AccessibleInfo info);
 
