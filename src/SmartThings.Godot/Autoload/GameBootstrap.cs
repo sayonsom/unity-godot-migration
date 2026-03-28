@@ -46,7 +46,8 @@ public partial class GameBootstrap : GodotNative.Node
         ServiceRegistration.RegisterGodotServices(services, this);
 
         // Register application-layer services
-        services.AddSingleton<Data.MockDeviceProvider>();
+        // To supply home data, register your ISmartHomeProvider implementation:
+        //   services.AddSingleton<ISmartHomeProvider, YourApiHomeProvider>();
         services.AddSingleton<Data.DeviceVisualizationManager>();
 
         _serviceProvider = services.BuildServiceProvider();

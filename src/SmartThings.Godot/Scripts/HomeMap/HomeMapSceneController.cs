@@ -1,26 +1,29 @@
 // =============================================================================
 // HomeMapSceneController.cs — Root controller for the Home Map scene
-// Wires assembler, camera, UI, accessibility, push-to-talk, and IoT events
+// Production version: wires assembler, camera, UI, accessibility, voice, IoT
 // =============================================================================
 
 using GodotNative = Godot;
 using SmartThings.Abstraction.Interfaces;
 using SmartThings.Abstraction.Models;
-using SmartThings.Godot.Data;
+using SmartThings.Godot.Autoload;
 using SmartThings.Godot.Scripts.Accessibility;
 using SmartThings.Godot.Scripts.IoT;
-using SmartThings.Godot.Scripts.Performance;
 using SmartThings.Godot.Scripts.Voice;
 using SmartThings.Godot.Services;
 
 namespace SmartThings.Godot.Scripts.HomeMap;
 
 /// <summary>
-/// Root controller for the HomeMapScene. Initializes all components
-/// and wires their signals together, including Phase 4 features:
+/// Root controller for the HomeMapScene. Initializes all subsystems
+/// and wires their signals together for production use:
 ///   - Push-to-talk voice commands
 ///   - TalkBack/screen reader accessibility
 ///   - Real-time IoT device events via MQTT
+///   - Device detail modal for device control
+///
+/// To load home data, call <see cref="LoadHome"/> with a SmartHome
+/// obtained from the SmartThings Cloud API or DI container.
 /// </summary>
 public partial class HomeMapSceneController : GodotNative.Node3D
 {
@@ -29,17 +32,15 @@ public partial class HomeMapSceneController : GodotNative.Node3D
     private IsometricCameraController? _camera;
     private HomeMapUI? _ui;
 
-    // Phase 4: Accessibility + Voice + IoT
+    // Accessibility + Voice + IoT
     private PushToTalkController? _pttController;
     private PushToTalkUI? _pttUI;
     private HomeMapAccessibilityManager? _a11yManager;
     private AccessibleDeviceAnnouncer? _deviceAnnouncer;
-    private AccessibilityTestPanel? _a11yTestPanel;
     private SmartThingsEventBus? _eventBus;
     private DeviceDetailModal? _deviceModal;
-    private AndroidProfiler? _profiler;
 
-    // Services (would come from DI in production)
+    // Services
     private GodotAccessibilityService? _a11yService;
     private GodotAudioService? _audioService;
 
@@ -62,36 +63,87 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         _ui.ResetViewPressed += () => _camera?.ResetView();
         _assembler.RoomSelected += OnRoomSelected;
 
-        // Load mock home data
-        _home = MockHomeProvider.CreateSampleHome();
-        _ui.SetHome(_home);
-        _assembler.BuildHome(_home);
+        // Load home data from DI container or SmartThings API
+        _home = ResolveHomeData();
 
-        // Phase 4: Initialize accessibility, voice, and IoT
-        InitializeAccessibility();
-        InitializePushToTalk();
-        InitializeEventBus();
+        if (_home != null)
+        {
+            _ui.SetHome(_home);
+            _assembler.BuildHome(_home);
 
-        // Register rooms and devices for accessibility after they're built
-        RegisterAccessibleElements();
+            // Initialize all subsystems
+            InitializeAccessibility();
+            InitializePushToTalk();
+            InitializeEventBus();
+            RegisterAccessibleElements();
+            InitializeDeviceModal();
 
-        // Phase 5: Device detail modal + performance profiler
-        InitializeDeviceModal();
-        InitializeProfiler();
-
-        GodotNative.GD.Print("[HomeMapScene] Loaded with Phase 5: device controls, profiler, CI/CD.");
+            GodotNative.GD.Print($"[HomeMapScene] Production ready. {_home.Rooms.Count} rooms, {_home.Devices.Count} devices.");
+        }
+        else
+        {
+            GodotNative.GD.PushError("[HomeMapScene] No home data available. Call LoadHome() or register ISmartHomeProvider.");
+        }
     }
 
-    // ── Phase 5: Device Detail Modal ──────────────────────────────────────────
+    // ── Public API ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Load or reload home data at runtime (e.g., after API fetch).
+    /// Rebuilds the 3D scene and re-registers all accessibility elements.
+    /// </summary>
+    public void LoadHome(SmartHome home)
+    {
+        _home = home;
+        _ui?.SetHome(home);
+        _assembler?.BuildHome(home);
+        _a11yManager?.Initialize(_a11yService!, home);
+        _pttController?.SetHome(home);
+        _eventBus?.Initialize(
+            GameBootstrap.Resolve<INetworkService>() as GodotNetworkService ?? new GodotNetworkService(), home);
+        RegisterAccessibleElements();
+
+        GodotNative.GD.Print($"[HomeMapScene] Reloaded: {home.Rooms.Count} rooms, {home.Devices.Count} devices.");
+    }
+
+    // ── Data Resolution ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Resolves home data from the DI container.
+    /// Override this method or register an ISmartHomeProvider to supply real API data.
+    /// </summary>
+    private SmartHome? ResolveHomeData()
+    {
+        // Try to resolve from DI container (production: registered by app layer)
+        try
+        {
+            var provider = GameBootstrap.TryResolve<ISmartHomeProvider>();
+            if (provider != null)
+            {
+                GodotNative.GD.Print("[HomeMapScene] Loading home from ISmartHomeProvider...");
+                return provider.GetCurrentHome();
+            }
+        }
+        catch (InvalidOperationException)
+        {
+            // GameBootstrap not initialized yet — ok, fall through
+        }
+
+        GodotNative.GD.PushWarning("[HomeMapScene] No ISmartHomeProvider registered. Register one in GameBootstrap or call LoadHome().");
+        return null;
+    }
+
+    // ── Device Detail Modal ─────────────────────────────────────────────────
 
     private void InitializeDeviceModal()
     {
         _deviceModal = new DeviceDetailModal();
-        var uiLayerModal = GetNode<GodotNative.CanvasLayer>("UIOverlay");
-        uiLayerModal.AddChild(_deviceModal);
+        var uiLayer = GetNode<GodotNative.CanvasLayer>("UIOverlay");
+        uiLayer.AddChild(_deviceModal);
 
-        // Wire device pin taps to open the modal
+        // Wire device pin taps to open the modal (both Area3D and raycast)
         _pinManager!.DevicePinTapped += OnDevicePinTapped;
+        _assembler!.DeviceTapped += OnDevicePinTapped;
 
         // Wire modal commands to event bus
         _deviceModal.DeviceCommandIssued += (deviceId, capability, command) =>
@@ -108,20 +160,13 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         if (device != null && _home != null)
         {
             _deviceModal?.ShowDevice(device, _home);
-            _a11yService?.Announce($"{device.Label}. {device.Category}. Tap controls to operate.", AnnouncePriority.Normal);
+            _a11yService?.Announce(
+                $"{device.Label}. {device.Category}. Tap controls to operate.",
+                AnnouncePriority.Normal);
         }
     }
 
-    // ── Phase 5: Performance Profiler ─────────────────────────────────────────
-
-    private void InitializeProfiler()
-    {
-        _profiler = new AndroidProfiler();
-        var uiLayerPerf = GetNode<GodotNative.CanvasLayer>("UIOverlay");
-        uiLayerPerf.AddChild(_profiler);
-    }
-
-    // ── Phase 4: Accessibility ──────────────────────────────────────────────
+    // ── Accessibility ───────────────────────────────────────────────────────
 
     private void InitializeAccessibility()
     {
@@ -146,71 +191,7 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         // Register voice commands for accessibility
         RegisterVoiceCommands();
 
-        // Accessibility test panel (on-screen buttons for testing on phone)
-        _a11yTestPanel = new AccessibilityTestPanel();
-        var uiLayerA11y = GetNode<GodotNative.CanvasLayer>("UIOverlay");
-        uiLayerA11y.AddChild(_a11yTestPanel);
-        _a11yTestPanel.Initialize(_a11yManager, _a11yService, _home!);
-
-        // Wire test panel signals
-        _a11yTestPanel.TestVoiceCommand += OnTestVoiceCommand;
-        _a11yTestPanel.TestDeviceEvent += OnTestDeviceEvent;
-
-        // Wire focus changes back to the test panel
-        _a11yManager.RoomFocused += (roomId) =>
-        {
-            var room = _home?.Rooms.Find(r => r.RoomId == roomId);
-            if (room != null)
-            {
-                var idx = _home!.Rooms.IndexOf(room);
-                _a11yTestPanel.UpdateFocusInfo(room.Name, "Room", idx, _home.Rooms.Count);
-            }
-        };
-        _a11yManager.DeviceFocused += (deviceId) =>
-        {
-            var device = _home?.Devices.Find(d => d.DeviceId == deviceId);
-            if (device != null)
-            {
-                var idx = _home!.Devices.IndexOf(device);
-                _a11yTestPanel.UpdateFocusInfo(device.Label, "Device", idx, _home.Devices.Count);
-            }
-        };
-
-        GodotNative.GD.Print("[A11y] Accessibility system initialized with test panel");
-    }
-
-    private void OnTestVoiceCommand(string command)
-    {
-        GodotNative.GD.Print($"[A11y Test] Voice command: \"{command}\"");
-
-        // Feed directly to intent parser pipeline
-        var intent = new SmartHomeIntentParser();
-        intent.SetHome(_home!);
-        var parsed = intent.Parse(command);
-
-        if (parsed != null)
-        {
-            _a11yService?.Announce($"Parsed: {parsed.Description}", AnnouncePriority.Normal);
-            _a11yTestPanel?.SetStatus($"Intent: {parsed.Type} — {parsed.Description}");
-
-            // Execute navigation intents
-            if (parsed.Type == IntentType.RoomNavigation && parsed.Room != null)
-            {
-                _assembler?.SelectRoom(parsed.Room.RoomId);
-                _a11yManager?.FocusElement(parsed.Room.RoomId);
-            }
-        }
-        else
-        {
-            _a11yService?.Announce($"Could not parse: {command}", AnnouncePriority.Normal);
-            _a11yTestPanel?.SetStatus($"No intent for: \"{command}\"");
-        }
-    }
-
-    private void OnTestDeviceEvent(string deviceId, string capability, string value)
-    {
-        GodotNative.GD.Print($"[A11y Test] Device event: {deviceId} → {capability}={value}");
-        _eventBus?.SimulateDeviceEvent(deviceId, capability, value);
+        GodotNative.GD.Print("[A11y] Accessibility system initialized");
     }
 
     private void RegisterAccessibleElements()
@@ -222,9 +203,7 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         {
             var roomNode = _assembler?.GetRoomNode(room.RoomId);
             if (roomNode != null)
-            {
                 _a11yManager.RegisterRoom(roomNode, room);
-            }
         }
 
         // Register each device
@@ -232,9 +211,7 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         {
             var pinNode = _pinManager?.GetPinNode(device.DeviceId);
             if (pinNode != null)
-            {
                 _a11yManager.RegisterDevice(pinNode, device);
-            }
         }
 
         GodotNative.GD.Print($"[A11y] Registered {_home.Rooms.Count} rooms and {_home.Devices.Count} devices");
@@ -268,26 +245,16 @@ public partial class HomeMapSceneController : GodotNative.Node3D
     /// </summary>
     private void OnRoomSelected(string roomId, string roomName)
     {
-        if (_isHandlingSelection) return; // break infinite loop
+        if (_isHandlingSelection) return;
         _isHandlingSelection = true;
 
         try
         {
-            // Show room info in UI
             _ui?.ShowRoomInfo(roomId, roomName);
-
-            // Move focus ring (but suppress its TTS — we'll do our own)
             _a11yManager?.FocusElementSilent(roomId);
 
-            // Update test panel focus info
-            var room = _home?.Rooms.Find(r => r.RoomId == roomId);
-            if (room != null)
-            {
-                var idx = _home!.Rooms.IndexOf(room);
-                _a11yTestPanel?.UpdateFocusInfo(room.Name, "Room", idx, _home.Rooms.Count);
-            }
-
             // ONE clean TTS announcement — room name + device summary
+            var room = _home?.Rooms.Find(r => r.RoomId == roomId);
             if (room != null && _a11yService != null)
             {
                 var devices = _home?.Devices.Where(d => d.RoomId == roomId).ToList();
@@ -309,13 +276,9 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         }
     }
 
-    /// <summary>
-    /// Called from accessibility panel navigation (Prev/Next/Select buttons).
-    /// Updates scene visuals without re-triggering the selection loop.
-    /// </summary>
     private void OnAccessibilityRoomFocused(string roomId)
     {
-        if (_isHandlingSelection) return; // break infinite loop
+        if (_isHandlingSelection) return;
         _isHandlingSelection = true;
 
         try
@@ -324,7 +287,6 @@ public partial class HomeMapSceneController : GodotNative.Node3D
             var room = _home?.Rooms.Find(r => r.RoomId == roomId);
             if (room != null)
                 _ui?.ShowRoomInfo(roomId, room.Name);
-            // TTS already handled by HomeMapAccessibilityManager.ApplyFocus()
         }
         finally
         {
@@ -342,7 +304,6 @@ public partial class HomeMapSceneController : GodotNative.Node3D
             var device = _home?.Devices.Find(d => d.DeviceId == deviceId);
             if (device != null)
                 _ui?.ShowDevicePopup(device);
-            // TTS already handled by HomeMapAccessibilityManager.ApplyFocus()
         }
         finally
         {
@@ -350,27 +311,23 @@ public partial class HomeMapSceneController : GodotNative.Node3D
         }
     }
 
-    // ── Phase 4: Push-to-Talk ───────────────────────────────────────────────
+    // ── Push-to-Talk ────────────────────────────────────────────────────────
 
     private void InitializePushToTalk()
     {
-        // Create audio service for microphone access
         _audioService = new GodotAudioService();
         AddChild(_audioService);
 
-        // Push-to-talk controller (full pipeline)
         _pttController = new PushToTalkController();
         AddChild(_pttController);
         _pttController.SetHome(_home!);
         _pttController.SetMicrophone(_audioService.Microphone);
 
-        // Push-to-talk UI overlay
         _pttUI = new PushToTalkUI();
         var uiLayer = GetNode<GodotNative.CanvasLayer>("UIOverlay");
         uiLayer.AddChild(_pttUI);
         _pttUI.SetController(_pttController);
 
-        // Wire voice command execution to event bus
         _pttController.CommandExecuted += OnVoiceCommandExecuted;
         _pttController.IntentParsed += OnVoiceIntentParsed;
 
@@ -380,53 +337,41 @@ public partial class HomeMapSceneController : GodotNative.Node3D
     private void OnVoiceCommandExecuted(string deviceLabel, string action)
     {
         GodotNative.GD.Print($"[PTT] Voice command executed: {action} on {deviceLabel}");
-
-        // Announce via accessibility
         _a11yService?.Announce($"Executed: {action} on {deviceLabel}", AnnouncePriority.Normal);
     }
 
     private void OnVoiceIntentParsed(string description, float confidence)
     {
-        // If it's a room navigation intent, move camera there
         if (description.StartsWith("Navigate to "))
         {
             var roomName = description["Navigate to ".Length..];
             var room = _home?.Rooms.Find(r =>
                 r.Name.Equals(roomName, StringComparison.OrdinalIgnoreCase));
             if (room != null)
-            {
                 _assembler?.SelectRoom(room.RoomId);
-            }
         }
     }
 
-    // ── Phase 4: IoT Event Bus ──────────────────────────────────────────────
+    // ── IoT Event Bus ───────────────────────────────────────────────────────
 
     private void InitializeEventBus()
     {
-        // Create network service for MQTT
         var networkService = new GodotNetworkService();
         AddChild(networkService);
 
         _eventBus = new SmartThingsEventBus();
         AddChild(_eventBus);
         _eventBus.Initialize(networkService, _home!);
-
-        // Register a handler that bridges events to the scene
         _eventBus.AddHandler(new SceneDeviceEventHandler(this));
-
-        // Wire device state changes to pin updates
         _eventBus.DeviceStateChanged += OnDeviceStateChanged;
 
-        GodotNative.GD.Print("[IoT] Event bus initialized (connect via MQTT when broker available)");
+        GodotNative.GD.Print("[IoT] Event bus initialized");
     }
 
     private void OnDeviceStateChanged(string deviceId, string capability, string value)
     {
-        // Update pin visual
         _pinManager?.UpdateDeviceState(deviceId, capability, value);
 
-        // Announce change for accessibility
         var device = _home?.Devices.Find(d => d.DeviceId == deviceId);
         if (device != null)
         {

@@ -1,6 +1,7 @@
 // =============================================================================
-// DevicePinManager.cs — Samsung SmartThings-style device map pins
-// Large circular billboard pins with emoji icons, status rings, and labels
+// DevicePinManager.cs — Google Maps-style 3D location pins for IoT devices
+// Real 3D geometry: colored sphere head + thin cylinder stick + label
+// Clickable via raycast, occluded by walls, visible from isometric view
 // =============================================================================
 
 using GodotNative = Godot;
@@ -9,33 +10,40 @@ using SmartThings.Abstraction.Models;
 namespace SmartThings.Godot.Scripts.HomeMap;
 
 /// <summary>
-/// Manages SmartThings-style device pin markers in the 3D Home Map View.
-/// Each pin is a white circle billboard with an emoji icon overlay,
-/// colored status ring (shader-based), and a text label underneath.
+/// Manages Google Maps-style 3D device pins in the Home Map.
+///
+/// Each pin is built from real 3D meshes (no shaders needed):
+///   - Colored sphere "head" with category letter
+///   - Thin dark cylinder "stick" connecting head to floor
+///   - Billboard Label3D for device name
+///   - StaticBody3D collision for tap detection via raycast
+///
+/// Pins are occluded by walls (proper depth testing).
 /// </summary>
 public partial class DevicePinManager : GodotNative.Node3D
 {
-    private GodotNative.Shader? _pinShader;
     private readonly Dictionary<string, GodotNative.Node3D> _pins = new();
-    private readonly Dictionary<string, GodotNative.ShaderMaterial> _pinMaterials = new();
+    private readonly Dictionary<string, GodotNative.StandardMaterial3D> _headMaterials = new();
     private readonly Dictionary<string, GodotNative.Label3D> _iconLabels = new();
     private readonly Dictionary<string, GodotNative.Label3D> _nameLabels = new();
-    private readonly Dictionary<string, GodotNative.MeshInstance3D> _bgDiscs = new();
 
-    private const float PinDiameter = 1.2f;
-    private const float PinRadius = PinDiameter / 2f;
-    private const float PinHeight = 1.8f;
-    private const float CollisionRadius = 0.6f;
-    private const float IconFontSize = 96;
-    private const float LabelFontSize = 28;
+    // ── Pin geometry sizes ──
+    private const float HeadRadius = 0.28f;      // Sphere head radius
+    private const float StickRadius = 0.04f;      // Thin cylinder
+    private const float StickHeight = 0.7f;       // Height of stick from floor
+    private const float HeadCenterY = StickHeight + HeadRadius; // Center of sphere
+    private const float TotalHeight = StickHeight + HeadRadius * 2; // Full pin height
+    private const float CollisionRadius = 0.5f;   // Tap target — generous for phone
+
+    private const float IconFontSize = 80;        // Category letter on sphere
+    private const float LabelFontSize = 28;       // Device name below
 
     /// <summary>Fired when a device pin is tapped.</summary>
     [GodotNative.Signal] public delegate void DevicePinTappedEventHandler(string deviceId);
 
     public override void _Ready()
     {
-        _pinShader = GodotNative.GD.Load<GodotNative.Shader>("res://Shaders/device_pin.gdshader");
-        GodotNative.GD.Print("[DevicePinManager] Ready.");
+        GodotNative.GD.Print("[DevicePinManager] Ready — 3D pin style.");
     }
 
     /// <summary>Spawn pins for all device placements in a home.</summary>
@@ -47,21 +55,23 @@ public partial class DevicePinManager : GodotNative.Node3D
         {
             var device = home.Devices.Find(d => d.DeviceId == placement.DeviceId);
             if (device == null) continue;
-
             SpawnPin(placement, device);
         }
 
-        GodotNative.GD.Print($"[DevicePinManager] Spawned {_pins.Count} SmartThings-style device pins.");
+        GodotNative.GD.Print($"[DevicePinManager] Spawned {_pins.Count} 3D pins.");
     }
 
-    /// <summary>Update a single pin's status color and activity.</summary>
+    /// <summary>Update a single pin's head color based on status.</summary>
     public void UpdatePinStatus(string deviceId, DeviceStatus status, bool isActive)
     {
-        if (!_pinMaterials.TryGetValue(deviceId, out var mat)) return;
-
-        var color = GetStatusColor(status);
-        mat.SetShaderParameter("status_color", new GodotNative.Color(color.R, color.G, color.B, color.A));
-        mat.SetShaderParameter("is_active", isActive);
+        if (!_headMaterials.TryGetValue(deviceId, out var mat)) return;
+        var c = GetStatusIndicatorColor(status);
+        mat.EmissionEnabled = isActive;
+        if (isActive)
+        {
+            mat.Emission = new GodotNative.Color(c.R, c.G, c.B);
+            mat.EmissionEnergyMultiplier = 0.3f;
+        }
     }
 
     /// <summary>Show or hide pins for a specific room.</summary>
@@ -75,7 +85,7 @@ public partial class DevicePinManager : GodotNative.Node3D
         }
     }
 
-    /// <summary>Get the Node3D for a specific device pin (for accessibility registration).</summary>
+    /// <summary>Get the Node3D for a specific device pin.</summary>
     public GodotNative.Node3D? GetPinNode(string deviceId)
     {
         return _pins.TryGetValue(deviceId, out var pin) ? pin : null;
@@ -84,25 +94,19 @@ public partial class DevicePinManager : GodotNative.Node3D
     /// <summary>Update a device's visual state from an IoT event.</summary>
     public void UpdateDeviceState(string deviceId, string capability, string value)
     {
-        if (!_pinMaterials.TryGetValue(deviceId, out var mat)) return;
+        if (!_headMaterials.TryGetValue(deviceId, out var mat)) return;
 
         bool isActive = value is "on" or "online" or "active" or "locked" or "open";
-        mat.SetShaderParameter("is_active", isActive);
+        mat.EmissionEnabled = isActive;
+        if (isActive)
+        {
+            mat.Emission = new GodotNative.Color(0.3f, 0.9f, 0.3f);
+            mat.EmissionEnergyMultiplier = 0.4f;
+        }
 
         if (value is "error" or "offline")
         {
-            mat.SetShaderParameter("status_color",
-                new GodotNative.Color(0.96f, 0.26f, 0.21f, 1.0f)); // Red
-        }
-        else if (isActive)
-        {
-            mat.SetShaderParameter("status_color",
-                new GodotNative.Color(0.3f, 0.69f, 0.31f, 1.0f)); // Green
-        }
-        else
-        {
-            mat.SetShaderParameter("status_color",
-                new GodotNative.Color(0.62f, 0.62f, 0.62f, 1.0f)); // Gray
+            mat.AlbedoColor = new GodotNative.Color(0.85f, 0.2f, 0.2f);
         }
     }
 
@@ -112,122 +116,106 @@ public partial class DevicePinManager : GodotNative.Node3D
         foreach (var pin in _pins.Values)
             pin.QueueFree();
         _pins.Clear();
-        _pinMaterials.Clear();
+        _headMaterials.Clear();
         _iconLabels.Clear();
         _nameLabels.Clear();
-        _bgDiscs.Clear();
     }
 
-    // ── Internals ────────────────────────────────────────────────────────────
+    // ── Pin Construction ─────────────────────────────────────────────────────
 
     private void SpawnPin(DevicePlacement placement, SmartDevice device)
     {
-        // Root Node3D container for the whole pin assembly
         var pinRoot = new GodotNative.Node3D();
         pinRoot.Name = $"Pin_{device.DeviceId}";
+        // Pin base sits on the floor at device position
         pinRoot.Position = new GodotNative.Vector3(
             placement.Position.X,
-            placement.Position.Y + PinHeight,
+            placement.Position.Y,
             placement.Position.Z);
+        pinRoot.SetMeta("device_id", device.DeviceId);
 
-        // ── 1. White circle background disc (StandardMaterial3D billboard) ──
-        var bgDisc = CreateBackgroundDisc(placement.IconScale);
-        pinRoot.AddChild(bgDisc);
-        _bgDiscs[device.DeviceId] = bgDisc;
+        float s = placement.IconScale;
 
-        // ── 2. Status ring overlay (shader-based, slightly larger) ──
-        var ringMesh = CreateStatusRing(device, placement.IconScale);
-        pinRoot.AddChild(ringMesh);
+        // 1. Stick (thin cylinder from floor up)
+        var stick = CreateStick(s);
+        pinRoot.AddChild(stick);
 
-        // ── 3. Drop shadow disc (dark, below, offset back slightly) ──
-        var shadow = CreateShadowDisc(placement.IconScale);
-        pinRoot.AddChild(shadow);
+        // 2. Sphere head (colored, at top of stick)
+        var head = CreateHead(device, s);
+        pinRoot.AddChild(head);
 
-        // ── 4. Emoji icon (Label3D centered on the pin) ──
-        var iconLabel = CreateIconLabel(device.Category, placement.IconScale);
-        pinRoot.AddChild(iconLabel);
-        _iconLabels[device.DeviceId] = iconLabel;
+        // 3. Category letter on sphere
+        var icon = CreateIconLabel(device.Category, s);
+        pinRoot.AddChild(icon);
+        _iconLabels[device.DeviceId] = icon;
 
-        // ── 5. Device name label (Label3D below the pin) ──
-        var nameLabel = CreateNameLabel(device.Label, placement.IconScale);
+        // 4. Device name label (below stick base)
+        var nameLabel = CreateNameLabel(device.Label, s);
         pinRoot.AddChild(nameLabel);
         _nameLabels[device.DeviceId] = nameLabel;
 
-        // ── 6. Tap collision area (large sphere for phone-friendly tapping) ──
-        var area = CreateTapArea(device.DeviceId, placement.IconScale);
-        pinRoot.AddChild(area);
+        // 5. Collision body for raycast tap detection
+        var body = CreateCollisionBody(device.DeviceId, s);
+        pinRoot.AddChild(body);
 
         AddChild(pinRoot);
         _pins[device.DeviceId] = pinRoot;
     }
 
-    private GodotNative.MeshInstance3D CreateBackgroundDisc(float scale)
+    private GodotNative.MeshInstance3D CreateStick(float scale)
     {
-        // White circle using a QuadMesh with a StandardMaterial3D billboard
-        var mesh = new GodotNative.QuadMesh();
-        mesh.Size = new GodotNative.Vector2(PinDiameter * scale, PinDiameter * scale);
+        var cylinder = new GodotNative.CylinderMesh();
+        cylinder.TopRadius = StickRadius * scale;
+        cylinder.BottomRadius = StickRadius * scale;
+        cylinder.Height = StickHeight * scale;
+        cylinder.RadialSegments = 8;
 
         var mat = new GodotNative.StandardMaterial3D();
-        mat.AlbedoColor = new GodotNative.Color(1.0f, 1.0f, 1.0f, 0.95f);
-        mat.Transparency = GodotNative.BaseMaterial3D.TransparencyEnum.Alpha;
+        mat.AlbedoColor = new GodotNative.Color(0.3f, 0.3f, 0.35f);
         mat.ShadingMode = GodotNative.BaseMaterial3D.ShadingModeEnum.Unshaded;
-        mat.BillboardMode = GodotNative.BaseMaterial3D.BillboardModeEnum.Enabled;
-        mat.CullMode = GodotNative.BaseMaterial3D.CullModeEnum.Disabled;
-        mat.NoDepthTest = false;
-        mat.RenderPriority = 1;
 
         var instance = new GodotNative.MeshInstance3D();
-        instance.Mesh = mesh;
+        instance.Mesh = cylinder;
         instance.MaterialOverride = mat;
         instance.CastShadow = GodotNative.GeometryInstance3D.ShadowCastingSetting.Off;
-        instance.Name = "BgDisc";
-        instance.Position = GodotNative.Vector3.Zero;
+        instance.Name = "Stick";
+        // Cylinder is centered on its Y, so offset up by half height
+        instance.Position = new GodotNative.Vector3(0, StickHeight * scale * 0.5f, 0);
 
         return instance;
     }
 
-    private GodotNative.MeshInstance3D CreateStatusRing(SmartDevice device, float scale)
+    private GodotNative.MeshInstance3D CreateHead(SmartDevice device, float scale)
     {
-        // Slightly larger quad with the device_pin shader for animated status ring
-        var ringSize = (PinDiameter + 0.15f) * scale;
-        var mesh = new GodotNative.QuadMesh();
-        mesh.Size = new GodotNative.Vector2(ringSize, ringSize);
+        var sphere = new GodotNative.SphereMesh();
+        sphere.Radius = HeadRadius * scale;
+        sphere.Height = HeadRadius * 2 * scale;
+        sphere.RadialSegments = 16;
+        sphere.Rings = 8;
 
-        var mat = CreateRingShaderMaterial(device);
-
-        var instance = new GodotNative.MeshInstance3D();
-        instance.Mesh = mesh;
-        instance.MaterialOverride = mat;
-        instance.CastShadow = GodotNative.GeometryInstance3D.ShadowCastingSetting.Off;
-        instance.Name = "StatusRing";
-        // Render slightly in front of background disc
-        instance.Position = new GodotNative.Vector3(0, 0, -0.001f);
-
-        _pinMaterials[device.DeviceId] = mat;
-        return instance;
-    }
-
-    private GodotNative.MeshInstance3D CreateShadowDisc(float scale)
-    {
-        var shadowSize = PinDiameter * scale * 0.9f;
-        var mesh = new GodotNative.QuadMesh();
-        mesh.Size = new GodotNative.Vector2(shadowSize, shadowSize);
-
+        var catColor = GetCategoryColor(device.Category);
         var mat = new GodotNative.StandardMaterial3D();
-        mat.AlbedoColor = new GodotNative.Color(0.0f, 0.0f, 0.0f, 0.2f);
-        mat.Transparency = GodotNative.BaseMaterial3D.TransparencyEnum.Alpha;
-        mat.ShadingMode = GodotNative.BaseMaterial3D.ShadingModeEnum.Unshaded;
-        mat.BillboardMode = GodotNative.BaseMaterial3D.BillboardModeEnum.Enabled;
-        mat.CullMode = GodotNative.BaseMaterial3D.CullModeEnum.Disabled;
-        mat.RenderPriority = 0;
+        mat.AlbedoColor = new GodotNative.Color(catColor.R, catColor.G, catColor.B);
+        mat.ShadingMode = GodotNative.BaseMaterial3D.ShadingModeEnum.PerPixel;
+        mat.Roughness = 0.4f;
+        mat.Metallic = 0.1f;
+
+        // Active devices get a subtle glow
+        if (device.Status == DeviceStatus.Online)
+        {
+            mat.EmissionEnabled = true;
+            mat.Emission = new GodotNative.Color(catColor.R * 0.5f, catColor.G * 0.5f, catColor.B * 0.5f);
+            mat.EmissionEnergyMultiplier = 0.2f;
+        }
+
+        _headMaterials[device.DeviceId] = mat;
 
         var instance = new GodotNative.MeshInstance3D();
-        instance.Mesh = mesh;
+        instance.Mesh = sphere;
         instance.MaterialOverride = mat;
         instance.CastShadow = GodotNative.GeometryInstance3D.ShadowCastingSetting.Off;
-        instance.Name = "Shadow";
-        // Offset slightly behind and below the main disc
-        instance.Position = new GodotNative.Vector3(0.04f, -0.04f, 0.002f);
+        instance.Name = "Head";
+        instance.Position = new GodotNative.Vector3(0, HeadCenterY * scale, 0);
 
         return instance;
     }
@@ -235,7 +223,7 @@ public partial class DevicePinManager : GodotNative.Node3D
     private GodotNative.Label3D CreateIconLabel(DeviceCategory category, float scale)
     {
         var label = new GodotNative.Label3D();
-        label.Text = GetCategoryEmoji(category);
+        label.Text = GetCategoryIcon(category);
         label.FontSize = (int)(IconFontSize * scale);
         label.HorizontalAlignment = GodotNative.HorizontalAlignment.Center;
         label.VerticalAlignment = GodotNative.VerticalAlignment.Center;
@@ -244,11 +232,14 @@ public partial class DevicePinManager : GodotNative.Node3D
         label.Shaded = false;
         label.DoubleSided = true;
         label.FixedSize = false;
-        label.PixelSize = 0.005f;
-        label.RenderPriority = 3;
-        label.Modulate = new GodotNative.Color(1.0f, 1.0f, 1.0f, 1.0f);
+        label.PixelSize = 0.003f;
+        label.RenderPriority = 5;
+        label.Modulate = new GodotNative.Color(1f, 1f, 1f, 1f);
+        label.OutlineSize = 10;
+        label.OutlineModulate = new GodotNative.Color(0, 0, 0, 0.6f);
         label.Name = "IconLabel";
-        label.Position = new GodotNative.Vector3(0, 0.02f, -0.002f);
+        // Positioned at sphere center, slightly in front
+        label.Position = new GodotNative.Vector3(0, HeadCenterY * scale, 0);
 
         return label;
     }
@@ -265,85 +256,62 @@ public partial class DevicePinManager : GodotNative.Node3D
         label.Shaded = false;
         label.DoubleSided = true;
         label.FixedSize = false;
-        label.PixelSize = 0.005f;
-        label.RenderPriority = 2;
+        label.PixelSize = 0.003f;
+        label.RenderPriority = 4;
         label.OutlineSize = 8;
-        label.OutlineModulate = new GodotNative.Color(0, 0, 0, 0.6f);
-        label.Modulate = new GodotNative.Color(1.0f, 1.0f, 1.0f, 0.95f);
+        label.OutlineModulate = new GodotNative.Color(0, 0, 0, 0.7f);
+        label.Modulate = new GodotNative.Color(1f, 1f, 1f, 0.95f);
         label.Name = "NameLabel";
-        // Position below the pin circle
-        label.Position = new GodotNative.Vector3(0, -(PinRadius * scale + 0.12f), -0.001f);
+        // Just below the floor level
+        label.Position = new GodotNative.Vector3(0, -0.1f, 0);
 
         return label;
     }
 
-    private GodotNative.Area3D CreateTapArea(string deviceId, float scale)
+    private GodotNative.StaticBody3D CreateCollisionBody(string deviceId, float scale)
     {
-        var area = new GodotNative.Area3D();
-        area.SetMeta("device_id", deviceId);
-        area.Name = "TapArea";
+        var body = new GodotNative.StaticBody3D();
+        body.SetMeta("device_id", deviceId);
+        body.Name = "TapBody";
+        body.InputRayPickable = true;
+
+        // Layer 2 for device pins (rooms use layer 1)
+        body.CollisionLayer = 2;
+        body.CollisionMask = 0;
 
         var colShape = new GodotNative.CollisionShape3D();
-        var sphere = new GodotNative.SphereShape3D();
-        sphere.Radius = CollisionRadius * scale;
-        colShape.Shape = sphere;
-        area.AddChild(colShape);
+        // Capsule covers the full pin height for easier tapping
+        var capsule = new GodotNative.CapsuleShape3D();
+        capsule.Radius = CollisionRadius * scale;
+        capsule.Height = TotalHeight * scale;
+        colShape.Shape = capsule;
+        // Center the capsule on the pin's vertical center
+        colShape.Position = new GodotNative.Vector3(0, TotalHeight * scale * 0.5f, 0);
+        body.AddChild(colShape);
 
-        area.InputEvent += (camera, inputEvent, position, normal, shapeIdx) =>
-        {
-            if (inputEvent is GodotNative.InputEventMouseButton mb && mb.Pressed
-                && mb.ButtonIndex == GodotNative.MouseButton.Left)
-            {
-                EmitSignal(SignalName.DevicePinTapped, deviceId);
-            }
-            if (inputEvent is GodotNative.InputEventScreenTouch touch && touch.Pressed)
-            {
-                EmitSignal(SignalName.DevicePinTapped, deviceId);
-            }
-        };
-
-        return area;
+        return body;
     }
 
-    private GodotNative.ShaderMaterial CreateRingShaderMaterial(SmartDevice device)
+    // ── Category icon mapping ───────────────────────────────────────────────
+
+    private static string GetCategoryIcon(DeviceCategory category) => category switch
     {
-        var mat = new GodotNative.ShaderMaterial();
-        if (_pinShader != null) mat.Shader = _pinShader;
-
-        var statusColor = GetStatusColor(device.Status);
-        var iconColor = GetCategoryColor(device.Category);
-
-        mat.SetShaderParameter("status_color",
-            new GodotNative.Color(statusColor.R, statusColor.G, statusColor.B, statusColor.A));
-        mat.SetShaderParameter("icon_color",
-            new GodotNative.Color(iconColor.R, iconColor.G, iconColor.B, iconColor.A));
-        mat.SetShaderParameter("is_active", device.Status == DeviceStatus.Online);
-        mat.SetShaderParameter("pulse_speed", 2.0f);
-        mat.SetShaderParameter("ring_width", 0.08f);
-
-        return mat;
-    }
-
-    // ── Category emoji mapping ────────────────────────────────────────────
-
-    private static string GetCategoryEmoji(DeviceCategory category) => category switch
-    {
-        DeviceCategory.Light => "\U0001F4A1",       // light bulb
-        DeviceCategory.Thermostat => "\u2744\uFE0F", // snowflake
-        DeviceCategory.Lock => "\U0001F512",          // lock
-        DeviceCategory.Camera => "\U0001F4F7",        // camera
-        DeviceCategory.Sensor => "\U0001F4E1",        // satellite antenna
-        DeviceCategory.Switch => "\u2699\uFE0F",      // gear
-        DeviceCategory.Television => "\U0001F4FA",    // TV
-        DeviceCategory.Speaker => "\U0001F50A",       // speaker high volume
-        DeviceCategory.Appliance => "\U0001F3E0",     // house
-        DeviceCategory.Hub => "\U0001F310",           // globe with meridians
-        _ => "\u2699\uFE0F"                           // gear (default)
+        DeviceCategory.Light       => "L",
+        DeviceCategory.Thermostat  => "T",
+        DeviceCategory.Lock        => "K",
+        DeviceCategory.Camera      => "C",
+        DeviceCategory.Sensor      => "S",
+        DeviceCategory.Switch      => "SW",
+        DeviceCategory.Television  => "TV",
+        DeviceCategory.Speaker     => "SP",
+        DeviceCategory.Appliance   => "A",
+        DeviceCategory.Hub         => "H",
+        _                          => "?"
     };
 
-    // ── Status and category color helpers ─────────────────────────────────
+    // ── Color helpers ───────────────────────────────────────────────────────
 
-    private static Abstraction.Color GetStatusColor(DeviceStatus status) => status switch
+    private static Abstraction.Color GetStatusIndicatorColor(DeviceStatus status) => status switch
     {
         DeviceStatus.Online => DeviceStatusColors.Online,
         DeviceStatus.Offline => DeviceStatusColors.Offline,
@@ -354,16 +322,16 @@ public partial class DevicePinManager : GodotNative.Node3D
 
     private static Abstraction.Color GetCategoryColor(DeviceCategory category) => category switch
     {
-        DeviceCategory.Light => new Abstraction.Color(1.0f, 0.92f, 0.23f),     // Yellow
-        DeviceCategory.Thermostat => new Abstraction.Color(0.13f, 0.59f, 0.95f), // Blue
-        DeviceCategory.Lock => new Abstraction.Color(0.61f, 0.15f, 0.69f),       // Purple
-        DeviceCategory.Camera => new Abstraction.Color(0.3f, 0.69f, 0.31f),      // Green
-        DeviceCategory.Sensor => new Abstraction.Color(0.0f, 0.74f, 0.83f),      // Teal
-        DeviceCategory.Switch => new Abstraction.Color(1.0f, 0.6f, 0.0f),        // Orange
-        DeviceCategory.Television => new Abstraction.Color(0.4f, 0.23f, 0.72f),  // Deep purple
-        DeviceCategory.Speaker => new Abstraction.Color(0.91f, 0.12f, 0.39f),    // Pink
-        DeviceCategory.Appliance => new Abstraction.Color(0.47f, 0.33f, 0.28f),  // Brown
-        DeviceCategory.Hub => new Abstraction.Color(0.13f, 0.59f, 0.95f),        // Blue
-        _ => new Abstraction.Color(0.75f, 0.75f, 0.75f)                          // Gray
+        DeviceCategory.Light      => new Abstraction.Color(0.95f, 0.75f, 0.0f),       // Gold
+        DeviceCategory.Thermostat => new Abstraction.Color(0.20f, 0.55f, 0.90f),      // Blue
+        DeviceCategory.Lock       => new Abstraction.Color(0.60f, 0.20f, 0.70f),      // Purple
+        DeviceCategory.Camera     => new Abstraction.Color(0.20f, 0.65f, 0.30f),      // Green
+        DeviceCategory.Sensor     => new Abstraction.Color(0.0f, 0.70f, 0.80f),       // Teal
+        DeviceCategory.Switch     => new Abstraction.Color(0.95f, 0.50f, 0.0f),       // Orange
+        DeviceCategory.Television => new Abstraction.Color(0.45f, 0.25f, 0.70f),      // Deep purple
+        DeviceCategory.Speaker    => new Abstraction.Color(0.88f, 0.15f, 0.40f),      // Pink
+        DeviceCategory.Appliance  => new Abstraction.Color(0.55f, 0.40f, 0.30f),      // Brown
+        DeviceCategory.Hub        => new Abstraction.Color(0.20f, 0.55f, 0.90f),      // Blue
+        _                         => new Abstraction.Color(0.55f, 0.55f, 0.55f)       // Gray
     };
 }

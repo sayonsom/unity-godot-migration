@@ -32,27 +32,28 @@ The abstraction layer (6 interfaces) keeps all business logic engine-agnostic. T
 - `IAccessibilityService` — Screen reader, TalkBack, voice command dispatch
 - `INetworkService` — HTTP (SmartThings Cloud), MQTT, CoAP, Matter
 - `ISceneService` — Scene lifecycle replacing MonoBehaviour
+- `ISmartHomeProvider` — Production data provider (implement to supply real SmartThings API data)
 
 ## 6-Phase Migration Plan (~26 weeks)
 
 | Phase | Name | Duration | Status |
 |-------|------|----------|--------|
-| 0 | Unity Dependency Audit | 2 weeks | NOT STARTED |
+| 0 | Unity Dependency Audit | 2 weeks | COMPLETED |
 | 1 | Godot Fork + Abstraction Layer | 3 weeks | COMPLETED |
 | 2 | Vertical Slice Migration | 4 weeks | COMPLETED |
-| 3 | Shader & Rendering Migration | 6 weeks | IN PROGRESS |
-| 4 | Accessibility + IoT Feature Build | 6 weeks | NOT STARTED |
-| 5 | Full Migration + Platform Export | 5 weeks | NOT STARTED |
+| 3 | Shader & Rendering Migration | 6 weeks | COMPLETED |
+| 4 | Accessibility + IoT Feature Build | 6 weeks | COMPLETED |
+| 5 | Full Migration + Platform Export | 5 weeks | IN PROGRESS |
 
 ## Critical Risks (3)
 
-1. **C# Web Export BLOCKER** — Godot 4.5 does not support C# web export. Track 4.6/4.7.
-2. **Shader Rewrite Volume** — Every Unity HLSL shader needs manual GDShader rewrite. No converter.
-3. **Push-to-Talk Custom Build** — Full voice pipeline (capture → VAD → STT → intent) from scratch.
+1. **C# Web Export BLOCKER** — No Godot version supports C# web export. Track 4.8+. Not relevant for Android/Galaxy Store target.
+2. **Shader Rewrite Volume** — RESOLVED. All 7 shaders migrated to GDShader. See shader-migration/ cheatsheet.
+3. **Push-to-Talk Custom Build** — RESOLVED. Full pipeline implemented: Silero VAD → Platform STT → Intent Parser.
 
 ## Technology Stack
 
-- **Engine:** Godot 4.5 stable (forked as godot-smartthings)
+- **Engine:** Godot 4.6.1 stable with .NET (forked as godot-smartthings)
 - **Language:** C# with .NET 8
 - **Build System:** SCons (Godot) + dotnet CLI (.NET projects)
 - **DI Container:** Microsoft.Extensions.DependencyInjection

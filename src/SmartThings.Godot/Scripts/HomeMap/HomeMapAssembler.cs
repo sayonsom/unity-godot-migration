@@ -117,6 +117,9 @@ public partial class HomeMapAssembler : GodotNative.Node3D
 
     // ── Event handlers ───────────────────────────────────────────────────────
 
+    /// <summary>Fired when a device pin is tapped via raycast.</summary>
+    [GodotNative.Signal] public delegate void DeviceTappedEventHandler(string deviceId);
+
     private void OnScreenTapped(GodotNative.Vector2 screenPos)
     {
         // Raycast from camera to find which room/device was tapped
@@ -127,14 +130,29 @@ public partial class HomeMapAssembler : GodotNative.Node3D
 
         var spaceState = _camera.GetWorld3D().DirectSpaceState;
         var query = GodotNative.PhysicsRayQueryParameters3D.Create(from, to);
+        // Collide with all layers (rooms on layer 1, device pins on layer 2)
+        query.CollisionMask = 0xFFFFFFFF;
+        query.CollideWithAreas = true;
+        query.CollideWithBodies = true;
         var result = spaceState.IntersectRay(query);
 
         if (result.Count > 0)
         {
             var collider = result["collider"].AsGodotObject();
-            if (collider is GodotNative.Node3D node && node.HasMeta("room_id"))
+
+            // Check for device pin tap first (higher priority)
+            if (collider is GodotNative.Node3D deviceNode && deviceNode.HasMeta("device_id"))
             {
-                string roomId = node.GetMeta("room_id").AsString();
+                string deviceId = deviceNode.GetMeta("device_id").AsString();
+                GodotNative.GD.Print($"[HomeMap] Raycast hit device: {deviceId}");
+                EmitSignal(SignalName.DeviceTapped, deviceId);
+                return;
+            }
+
+            // Then check for room tap
+            if (collider is GodotNative.Node3D roomNode && roomNode.HasMeta("room_id"))
+            {
+                string roomId = roomNode.GetMeta("room_id").AsString();
                 SelectRoom(roomId);
                 return;
             }
