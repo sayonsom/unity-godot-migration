@@ -1,6 +1,8 @@
 // =============================================================================
 // HomeMapAccessibilityManager.cs — TalkBack/screen reader support for Home Map
-// Labels all 3D elements, manages focus ring, announces state changes
+// Labels all 3D elements, manages focus ring, announces state changes.
+// Navigation via on-screen buttons (AccessibilityTestPanel), keyboard (Tab),
+// or Android TalkBack native gestures (handled by OS, not here).
 // =============================================================================
 
 using GodotNative = Godot;
@@ -13,12 +15,16 @@ namespace SmartThings.Godot.Scripts.Accessibility;
 /// <summary>
 /// Manages accessibility for the 3D Home Map scene:
 ///   - Registers all rooms and device pins as accessible elements
-///   - Provides sequential focus navigation (swipe-based on Android TalkBack)
+///   - Provides sequential focus navigation via public methods
 ///   - Shows a visible focus ring around the focused element
 ///   - Announces room info and device status on focus
-///   - Handles "Explore by Touch" for TalkBack users
 ///
-/// This is the bridge between the 3D scene and platform screen readers.
+/// NOTE: Touch swipe gestures are NOT handled here (they conflict with camera pan).
+/// Instead, navigation happens via:
+///   1. The A11Y test panel buttons (Prev/Next/Activate)
+///   2. Keyboard Tab/Shift+Tab (desktop)
+///   3. Android TalkBack native gestures (OS-level, no code needed)
+///   4. Volume button shortcuts (see below)
 /// </summary>
 public partial class HomeMapAccessibilityManager : GodotNative.Node
 {
@@ -33,16 +39,6 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
     // Focus ring visual
     private GodotNative.MeshInstance3D? _focusRingMesh;
     private float _focusRingPhase;
-
-    // Touch swipe gesture detection (for phone a11y without TalkBack)
-    private GodotNative.Vector2 _touchStartPos;
-    private bool _touchActive;
-    private double _touchStartTime;
-    private const float SwipeThreshold = 80f;  // minimum pixels for a swipe
-    private const float SwipeMaxTime = 0.5f;   // seconds — fast flick only
-    private const float DoubleTapMaxTime = 0.4f;
-    private double _lastTapTime;
-    private int _tapCount;
 
     /// <summary>Fired when a room is focused via accessibility navigation.</summary>
     [GodotNative.Signal] public delegate void RoomFocusedEventHandler(string roomId);
@@ -61,10 +57,9 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         _a11y = a11y;
         _home = home;
 
-        // Announce scene on load
         _a11y.Announce(
             $"Home Map View. {home.Name} with {home.Rooms.Count} rooms and {home.Devices.Count} devices. " +
-            "Swipe right to navigate between rooms and devices.",
+            "Use the accessibility panel to navigate.",
             AnnouncePriority.High);
     }
 
@@ -86,7 +81,6 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
 
         _elements.Add(element);
 
-        // Set metadata for TalkBack
         node.SetMeta("a11y_name", info.Name);
         node.SetMeta("a11y_desc", info.Description);
         node.SetMeta("a11y_role", "room");
@@ -114,7 +108,7 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         node.SetMeta("a11y_role", "device");
     }
 
-    /// <summary>Navigate to the next accessible element (TalkBack swipe-right).</summary>
+    /// <summary>Navigate to the next accessible element.</summary>
     public void FocusNext()
     {
         if (_elements.Count == 0) return;
@@ -122,7 +116,7 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         ApplyFocus();
     }
 
-    /// <summary>Navigate to the previous accessible element (TalkBack swipe-left).</summary>
+    /// <summary>Navigate to the previous accessible element.</summary>
     public void FocusPrevious()
     {
         if (_elements.Count == 0) return;
@@ -130,7 +124,7 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         ApplyFocus();
     }
 
-    /// <summary>Activate the currently focused element (TalkBack double-tap).</summary>
+    /// <summary>Activate the currently focused element.</summary>
     public void ActivateFocused()
     {
         if (_focusIndex < 0 || _focusIndex >= _elements.Count) return;
@@ -166,7 +160,6 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
     {
         _a11y?.Announce($"{device.Label}: {change}", AnnouncePriority.Normal);
 
-        // Update the registered element info
         var element = _elements.FirstOrDefault(e => e.Id == device.DeviceId);
         if (element != null)
         {
@@ -188,11 +181,18 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         HideFocusRing();
     }
 
-    // ── Input handling for accessibility gestures ────────────────────────────
+    /// <summary>Get the current focused element info (for UI display).</summary>
+    public (string name, string type, int index, int total)? GetFocusInfo()
+    {
+        if (_focusIndex < 0 || _focusIndex >= _elements.Count) return null;
+        var el = _elements[_focusIndex];
+        return (el.Info.Name, el.ElementType.ToString(), _focusIndex, _elements.Count);
+    }
+
+    // ── Keyboard input (desktop / Bluetooth keyboard) ─────────────────────────
 
     public override void _UnhandledInput(GodotNative.InputEvent @event)
     {
-        // Keyboard navigation for accessibility testing
         if (@event is GodotNative.InputEventKey key && key.Pressed)
         {
             switch (key.Keycode)
@@ -210,63 +210,6 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
                     break;
             }
         }
-
-        // Touch swipe gestures for phone accessibility navigation
-        // Swipe right → next, Swipe left → previous, Double-tap → activate
-        if (@event is GodotNative.InputEventScreenTouch touch)
-        {
-            if (touch.Pressed)
-            {
-                _touchStartPos = touch.Position;
-                _touchActive = true;
-                _touchStartTime = GodotNative.Time.GetTicksMsec() / 1000.0;
-            }
-            else if (_touchActive)
-            {
-                _touchActive = false;
-                var elapsed = GodotNative.Time.GetTicksMsec() / 1000.0 - _touchStartTime;
-                var delta = touch.Position - _touchStartPos;
-                var absX = MathF.Abs(delta.X);
-                var absY = MathF.Abs(delta.Y);
-
-                if (absX > SwipeThreshold && absX > absY * 1.5f && elapsed < SwipeMaxTime)
-                {
-                    // Horizontal swipe detected
-                    if (delta.X > 0)
-                    {
-                        FocusNext();
-                        GodotNative.GD.Print("[A11y] Swipe right → next");
-                    }
-                    else
-                    {
-                        FocusPrevious();
-                        GodotNative.GD.Print("[A11y] Swipe left → previous");
-                    }
-                    GetViewport().SetInputAsHandled();
-                }
-                else if (absX < 30 && absY < 30 && elapsed < 0.3)
-                {
-                    // Tap detected — check for double-tap
-                    var now = GodotNative.Time.GetTicksMsec() / 1000.0;
-                    if (now - _lastTapTime < DoubleTapMaxTime)
-                    {
-                        _tapCount++;
-                        if (_tapCount >= 2)
-                        {
-                            ActivateFocused();
-                            _tapCount = 0;
-                            GodotNative.GD.Print("[A11y] Double-tap → activate");
-                            GetViewport().SetInputAsHandled();
-                        }
-                    }
-                    else
-                    {
-                        _tapCount = 1;
-                    }
-                    _lastTapTime = now;
-                }
-            }
-        }
     }
 
     // ── Focus ring visual ───────────────────────────────────────────────────
@@ -278,7 +221,6 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         _focusRing.Visible = false;
         AddChild(_focusRing);
 
-        // Create a torus-like ring using a TorusMesh
         _focusRingMesh = new GodotNative.MeshInstance3D();
         var torusMesh = new GodotNative.TorusMesh();
         torusMesh.InnerRadius = 0.8f;
@@ -287,7 +229,6 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         torusMesh.RingSegments = 16;
         _focusRingMesh.Mesh = torusMesh;
 
-        // Bright orange unlit material for focus ring
         var mat = new GodotNative.StandardMaterial3D();
         mat.AlbedoColor = new GodotNative.Color(1.0f, 0.6f, 0.0f, 0.8f);
         mat.ShadingMode = GodotNative.BaseMaterial3D.ShadingModeEnum.Unshaded;
@@ -303,7 +244,7 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
     {
         if (_focusRing == null || !_focusRing.Visible) return;
 
-        // Gentle rotation animation on focus ring
+        // Gentle rotation animation
         _focusRingPhase += (float)delta;
         _focusRing.RotationDegrees = new GodotNative.Vector3(
             90, _focusRingPhase * 45f, 0);
@@ -320,23 +261,26 @@ public partial class HomeMapAccessibilityManager : GodotNative.Node
         var element = _elements[_focusIndex];
         if (!GodotNative.GodotObject.IsInstanceValid(element.Node)) return;
 
-        // Move focus ring to element position
         ShowFocusRing(element.Node.GlobalPosition);
 
-        // Announce to screen reader
         var announcement = element.ElementType == AccessibleElementType.Room
             ? $"Room: {element.Info.Name}. {element.Info.Description}"
             : $"Device: {element.Info.Name}. {element.Info.Description}";
 
         _a11y?.Announce(announcement, AnnouncePriority.Normal);
 
-        GodotNative.GD.Print($"[A11y] Focus: {announcement}");
+        // Emit appropriate signal
+        if (element.ElementType == AccessibleElementType.Room)
+            EmitSignal(SignalName.RoomFocused, element.Id);
+        else
+            EmitSignal(SignalName.DeviceFocused, element.Id);
+
+        GodotNative.GD.Print($"[A11y] Focus [{_focusIndex + 1}/{_elements.Count}]: {announcement}");
     }
 
     private void ShowFocusRing(GodotNative.Vector3 position)
     {
         if (_focusRing == null) return;
-
         _focusRing.GlobalPosition = position + new GodotNative.Vector3(0, 0.2f, 0);
         _focusRing.Visible = true;
         _focusRingPhase = 0;
